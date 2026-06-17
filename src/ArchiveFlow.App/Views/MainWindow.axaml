@@ -1,44 +1,21 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:ArchiveFlow.App.ViewModels"
+        xmlns:views="using:ArchiveFlow.App.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="ArchiveFlow.App.Views.MainWindow"
-        x:DataType="vm:MainWindowViewModel"
+        x:DataType="vm:NodeCanvasViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="ArchiveFlow Studio"
-        Width="900" Height="600">
+        Title="ArchiveFlow Studio - Node Canvas"
+        Width="1000" Height="700">
 
     <Design.DataContext>
-        <vm:MainWindowViewModel/>
+        <vm:NodeCanvasViewModel/>
     </Design.DataContext>
 
-    <DockPanel Margin="16">
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10" Margin="0,0,0,16">
-            <TextBlock Text="Folder Path:" VerticalAlignment="Center"/>
-            <TextBox Text="{Binding SelectedPath}" Width="400" IsReadOnly="True"/>
-            <Button Content="Select Folder" Command="{Binding SelectFolderCommand}"/>
-            <Button Content="Scan Files" Command="{Binding ScanFilesCommand}" IsEnabled="{Binding !IsScanning}"/>
-            <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsScanning}" Width="100" VerticalAlignment="Center"/>
-        </StackPanel>
+    <!-- Directly embed the NodeCanvasView -->
+    <views:NodeCanvasView />
 
-        <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusMessage}" Margin="0,16,0,0" FontWeight="Bold"/>
-
-        <Border BorderBrush="Gray" BorderThickness="1" CornerRadius="4">
-            <ListBox ItemsSource="{Binding Files}">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Orientation="Horizontal" Spacing="15" Margin="4">
-                            <TextBlock Text="{Binding ArchiveId}" FontWeight="Bold" Width="220" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding FileName}" Width="250" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding FileExtension}" Width="60"/>
-                            <TextBlock Text="{Binding FileSize, StringFormat='{}{0:N0} bytes'}" Width="120"/>
-                            <TextBlock Text="{Binding Status}" Width="100"/>
-                        </StackPanel>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-        </Border>
-    </DockPanel>
 </Window>

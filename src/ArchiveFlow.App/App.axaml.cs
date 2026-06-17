@@ -37,7 +37,7 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         {
             desktop.MainWindow = new MainWindow
             {
-                DataContext = Services.GetRequiredService<MainWindowViewModel>(),
+                DataContext = Services.GetRequiredService<NodeCanvasViewModel>(),
             };
         }
 
@@ -55,7 +55,9 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         services.AddSingleton<IFileHashingService, Sha256FileHashingService>();
         services.AddTransient<IFileScanner, LocalFileScanner>();
         services.AddSingleton<IFileRepository, SqliteFileRepository>();
-        
+        services.AddTransient<ArchiveFlow.Application.Workflows.WorkflowEngine>();
+        services.AddTransient<ArchiveFlow.App.ViewModels.NodeCanvasViewModel>();
+
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb
                 .AddSQLite()
