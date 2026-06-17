@@ -1,21 +1,84 @@
-<Window xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:ArchiveFlow.App.ViewModels"
-        xmlns:views="using:ArchiveFlow.App.Views"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
-        x:Class="ArchiveFlow.App.Views.MainWindow"
-        x:DataType="vm:NodeCanvasViewModel"
-        Icon="/Assets/avalonia-logo.ico"
-        Title="ArchiveFlow Studio - Node Canvas"
-        Width="1000" Height="700">
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ArchiveFlow.App.ViewModels"
+             xmlns:views="using:ArchiveFlow.App.Views"
+             x:Class="ArchiveFlow.App.Views.NodeCanvasView"
+             x:DataType="vm:NodeCanvasViewModel">
 
-    <Design.DataContext>
-        <vm:NodeCanvasViewModel/>
-    </Design.DataContext>
+    <Grid RowDefinitions="Auto,*,Auto,Auto">
+        <!-- Toolbar -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="10">
+            <Button Content="Execute Workflow" Command="{Binding ExecuteWorkflowCommand}" IsEnabled="{Binding !IsExecuting}" Classes="accent"/>
+            <Button Content="Preview Action" Command="{Binding PreviewActionCommand}" IsEnabled="{Binding !IsExecuting}"/>
+            <Button Content="Apply Action" Command="{Binding ApplyActionCommand}" IsEnabled="{Binding !IsExecuting}" Classes="accent"/>
+            <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsExecuting}" Width="100" VerticalAlignment="Center"/>
+        </StackPanel>
 
-    <!-- Directly embed the NodeCanvasView -->
-    <views:NodeCanvasView />
+        <!-- Canvas Area with Edges and Nodes -->
+        <Border Grid.Row="1" Background="#1E1E1E" Margin="10,0" CornerRadius="4" ClipToBounds="True">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                <Grid Width="2000" Height="1000">
+                    <!-- Draw Edges (Lines) -->
+                    <ItemsControl ItemsSource="{Binding Edges}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:EdgeViewModel">
+                                <!-- StartPoint and EndPoint are now calculated in C# -->
+                                <Line StartPoint="{Binding StartPoint}" 
+                                      EndPoint="{Binding EndPoint}" 
+                                      Stroke="#007ACC" 
+                                      StrokeThickness="2" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
-</Window>
+                    <!-- Draw Nodes -->
+                    <ItemsControl ItemsSource="{Binding Nodes}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:NodeViewModel">
+                                <!-- Set Canvas.Left and Canvas.Top directly on the root element -->
+                                <views:NodeView Canvas.Left="{Binding X}" Canvas.Top="{Binding Y}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Preview Message -->
+        <TextBlock Grid.Row="2" Text="{Binding PreviewMessage}" Foreground="Yellow" Margin="10,5" FontWeight="Bold"/>
+
+        <!-- Result Table & Log -->
+        <Grid Grid.Row="3" ColumnDefinitions="*,*" Margin="10" Height="200">
+            <!-- Result Table -->
+            <Border Grid.Column="0" Background="#252526" CornerRadius="4" Margin="0,0,5,0">
+                <ListBox ItemsSource="{Binding ResultFiles}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="4">
+                                <TextBlock Text="{Binding ArchiveId}" Width="150" Foreground="White"/>
+                                <TextBlock Text="{Binding FileName}" Width="200" Foreground="White"/>
+                                <TextBlock Text="{Binding Status}" Width="100" Foreground="#00FF00"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+
+            <!-- Execution Log -->
+            <Border Grid.Column="1" Background="#252526" CornerRadius="4" Margin="5,0,0,0">
+                <TextBox Text="{Binding ExecutionLog}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                         Background="Transparent" BorderThickness="0" Foreground="#00FF00" FontFamily="Consolas, monospace"/>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
