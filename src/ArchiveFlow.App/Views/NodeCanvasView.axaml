@@ -5,58 +5,102 @@
              x:Class="ArchiveFlow.App.Views.NodeCanvasView"
              x:DataType="vm:NodeCanvasViewModel">
 
-    <Grid RowDefinitions="Auto,*,Auto">
+    <Grid RowDefinitions="Auto,*,Auto,Auto">
         <!-- Toolbar -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="10">
-            <Button Content="Execute Workflow" 
-                    Command="{Binding ExecuteWorkflowCommand}"
-                    IsEnabled="{Binding !IsExecuting}"
-                    Classes="accent"/>
-            <ProgressBar IsIndeterminate="True" 
-                         IsVisible="{Binding IsExecuting}" 
-                         Width="100" 
-                         VerticalAlignment="Center"/>
+            <Button Content="Execute Workflow" Command="{Binding ExecuteWorkflowCommand}" IsEnabled="{Binding !IsExecuting}" Classes="accent"/>
+            <Button Content="Preview Action" Command="{Binding PreviewActionCommand}" IsEnabled="{Binding !IsExecuting}"/>
+            <Button Content="Apply Action" Command="{Binding ApplyActionCommand}" IsEnabled="{Binding !IsExecuting}" Classes="accent"/>
+            <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsExecuting}" Width="100" VerticalAlignment="Center"/>
         </StackPanel>
 
-        <!-- Canvas Area -->
-        <Border Grid.Row="1" Background="#1E1E1E" Margin="10" CornerRadius="4">
+        <!-- Canvas Area with Edges and Nodes -->
+        <Border Grid.Row="1" Background="#1E1E1E" Margin="10,0" CornerRadius="4" ClipToBounds="True">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                <ItemsControl ItemsSource="{Binding Nodes}">
-                    <!-- Use Canvas as the panel -->
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <Canvas Width="2000" Height="1000" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    
-                    <!-- Position each item on the Canvas -->
-                    <ItemsControl.Styles>
-                        <Style Selector="ContentPresenter" x:DataType="vm:NodeViewModel">
-                            <Setter Property="Canvas.Left" Value="{Binding X}" />
-                            <Setter Property="Canvas.Top" Value="{Binding Y}" />
-                        </Style>
-                    </ItemsControl.Styles>
+                <Grid Width="2000" Height="1000">
+                    <!-- Draw Edges (Lines) -->
+                    <ItemsControl ItemsSource="{Binding Edges}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:EdgeViewModel">
+                                <!-- Simple line connecting center of nodes. 
+                                     Note: In a real app, you'd calculate port positions. -->
+                                <Line Stroke="#007ACC" StrokeThickness="2">
+                                    <Line.StartPoint>
+                                        <MultiBinding Converter="{x:Static EdgePointConverter.Instance}">
+                                            <Binding Path="Source.X"/>
+                                            <Binding Path="Source.Y"/>
+                                            <Binding Path="Target.X"/>
+                                            <Binding Path="Target.Y"/>
+                                            <Binding Source="Start"/>
+                                        </MultiBinding>
+                                    </Line.StartPoint>
+                                    <Line.EndPoint>
+                                        <MultiBinding Converter="{x:Static EdgePointConverter.Instance}">
+                                            <Binding Path="Source.X"/>
+                                            <Binding Path="Source.Y"/>
+                                            <Binding Path="Target.X"/>
+                                            <Binding Path="Target.Y"/>
+                                            <Binding Source="End"/>
+                                        </MultiBinding>
+                                    </Line.EndPoint>
+                                </Line>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
-                    <!-- The template for each node -->
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:NodeViewModel">
-                            <views:NodeView />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    <!-- Draw Nodes -->
+                    <ItemsControl ItemsSource="{Binding Nodes}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemContainerStyle>
+                            <Style Selector="ContentPresenter">
+                                <Setter Property="Canvas.Left" Value="{Binding X}" />
+                                <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                            </Style>
+                        </ItemsControl.ItemContainerStyle>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:NodeViewModel">
+                                <views:NodeView />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
             </ScrollViewer>
         </Border>
 
-        <!-- Execution Log -->
-        <Border Grid.Row="2" Background="#252526" Margin="10,0,10,10" CornerRadius="4" Height="150">
-            <TextBox Text="{Binding ExecutionLog}" 
-                     IsReadOnly="True" 
-                     AcceptsReturn="True" 
-                     TextWrapping="Wrap"
-                     Background="Transparent"
-                     BorderThickness="0"
-                     Foreground="#00FF00"
-                     FontFamily="Consolas, Courier New, monospace"/>
-        </Border>
+        <!-- Preview Message -->
+        <TextBlock Grid.Row="2" Text="{Binding PreviewMessage}" Foreground="Yellow" Margin="10,5" FontWeight="Bold"/>
+
+        <!-- Result Table & Log -->
+        <Grid Grid.Row="3" ColumnDefinitions="*,*" Margin="10" Height="200">
+            <!-- Result Table -->
+            <Border Grid.Column="0" Background="#252526" CornerRadius="4" Margin="0,0,5,0">
+                <ListBox ItemsSource="{Binding ResultFiles}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="10" Margin="4">
+                                <TextBlock Text="{Binding ArchiveId}" Width="150" Foreground="White"/>
+                                <TextBlock Text="{Binding FileName}" Width="200" Foreground="White"/>
+                                <TextBlock Text="{Binding Status}" Width="100" Foreground="#00FF00"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+
+            <!-- Execution Log -->
+            <Border Grid.Column="1" Background="#252526" CornerRadius="4" Margin="5,0,0,0">
+                <TextBox Text="{Binding ExecutionLog}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                         Background="Transparent" BorderThickness="0" Foreground="#00FF00" FontFamily="Consolas, monospace"/>
+            </Border>
+        </Grid>
     </Grid>
 </UserControl>
