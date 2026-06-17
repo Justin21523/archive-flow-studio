@@ -1,0 +1,26 @@
+cd ~/web-projects/ArchiveFlow
+
+cat << 'EOF' > .gitignore
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.vs/
+.vscode/
+*.swp
+*.dotCover
+
+## Database
+*.db
+*.db-shm
+*.db-wal
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Node/JS (if any WebView stuff later)
+node_modules/
+EOF
