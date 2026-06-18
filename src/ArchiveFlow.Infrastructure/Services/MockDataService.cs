@@ -48,6 +48,9 @@ public class MockDataService : IMockDataService
     {
         _logger.LogInformation("Starting massive mock data generation...");
 
+        // 1. Initialize Standard Metadata Fields (Dublin Core + Personal)
+        await InitializeStandardFieldsAsync();
+
         // 1. Generate Mock Images (50 files)
         await GenerateMockImagesAsync(50);
 
@@ -61,6 +64,26 @@ public class MockDataService : IMockDataService
         await GenerateMockAssetFilesAsync(20);
 
         _logger.LogInformation("Massive mock data generation completed.");
+    }
+    
+    private async Task InitializeStandardFieldsAsync()
+    {
+        // Descriptive Metadata (Dublin Core)
+        await _metadataRepository.GetOrCreateFieldAsync("title", "Title", "String", "Descriptive", true);
+        await _metadataRepository.GetOrCreateFieldAsync("creator", "Creator", "String", "Descriptive", false);
+        await _metadataRepository.GetOrCreateFieldAsync("subject", "Subject", "String", "Descriptive", true);
+        await _metadataRepository.GetOrCreateFieldAsync("description", "Description", "String", "Descriptive", false);
+        
+        // Personal Knowledge
+        await _metadataRepository.GetOrCreateFieldAsync("tag", "Tag", "String", "Personal", false);
+        await _metadataRepository.GetOrCreateFieldAsync("project", "Project", "String", "Personal", false);
+        await _metadataRepository.GetOrCreateFieldAsync("reading_status", "Reading Status", "String", "Personal", false);
+        
+        // Technical
+        await _metadataRepository.GetOrCreateFieldAsync("format", "Format", "String", "Technical", false);
+        await _metadataRepository.GetOrCreateFieldAsync("identifier", "Identifier", "String", "Technical", true);
+
+        _logger.LogInformation("Standard metadata fields initialized.");
     }
 
     private async Task GenerateMockImagesAsync(int count)

@@ -18,7 +18,6 @@ public class SqliteMetadataRepository : IMetadataRepository
 
     public SqliteMetadataRepository(ILogger<SqliteMetadataRepository> logger)
     {
-        // 修改：使用專案根目錄下的 Data 資料夾
         var dbPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "archiveflow.db");
         Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
         _connectionString = $"Data Source={dbPath};";
@@ -27,21 +26,30 @@ public class SqliteMetadataRepository : IMetadataRepository
 
     private IDbConnection CreateConnection() => new SqliteConnection(_connectionString);
 
-    public async Task<MetadataField?> GetOrCreateFieldAsync(string fieldName, string displayName, string fieldType = "String")
+    public async Task<MetadataField?> GetOrCreateFieldAsync(string fieldName, string displayName, string fieldType = "String", string category = "Basic", bool isRequired = false)
     {
         using var connection = CreateConnection();
-        var field = await connection.QueryFirstOrDefaultAsync<MetadataField>("SELECT * FROM metadata_fields WHERE field_name = @FieldName", new { FieldName = fieldName });
+        var field = await connection.QueryFirstOrDefaultAsync<MetadataField>(
+            "SELECT * FROM metadata_fields WHERE field_name = @FieldName", 
+            new { FieldName = fieldName });
+
         if (field != null) return field;
 
-        await connection.ExecuteAsync("INSERT INTO metadata_fields (field_name, display_name, field_type) VALUES (@FieldName, @DisplayName, @FieldType)",
-            new { FieldName = fieldName, DisplayName = displayName, FieldType = fieldType });
-        return await connection.QueryFirstOrDefaultAsync<MetadataField>("SELECT * FROM metadata_fields WHERE field_name = @FieldName", new { FieldName = fieldName });
+        await connection.ExecuteAsync(
+            "INSERT INTO metadata_fields (field_name, display_name, field_type, category, is_required) VALUES (@FieldName, @DisplayName, @FieldType, @Category, @IsRequired)",
+            new { FieldName = fieldName, DisplayName = displayName, FieldType = fieldType, Category = category, IsRequired = isRequired });
+
+        return await connection.QueryFirstOrDefaultAsync<MetadataField>(
+            "SELECT * FROM metadata_fields WHERE field_name = @FieldName", 
+            new { FieldName = fieldName });
     }
 
     public async Task AddMetadataValueAsync(string fileId, int fieldId, string valueText)
     {
         using var connection = CreateConnection();
-        await connection.ExecuteAsync("INSERT INTO metadata_values (file_id, field_id, value_text, created_at) VALUES (@FileId, @FieldId, @ValueText, @CreatedAt)",
+        // Prevent duplicate simple tags/subjects for the same file (Optional logic, simplified here)
+        await connection.ExecuteAsync(
+            "INSERT INTO metadata_values (file_id, field_id, value_text, created_at) VALUES (@FileId, @FieldId, @ValueText, @CreatedAt)",
             new { FileId = fileId, FieldId = fieldId, ValueText = valueText, CreatedAt = DateTime.UtcNow });
     }
 
@@ -49,8 +57,17 @@ public class SqliteMetadataRepository : IMetadataRepository
     {
         using var connection = CreateConnection();
         const string sql = @"
-            SELECT mv.id, mv.file_id as FileId, mv.field_id as FieldId, mv.value_text as ValueText, mv.created_at as CreatedAt, mf.field_name as FieldName
-            FROM metadata_values mv JOIN metadata_fields mf ON mv.field_id = mf.id WHERE mv.file_id = @FileId";
+            SELECT mv.id, mv.file_id as FileId, mv.field_id as FieldId, mv.value_text as ValueText, mv.created_at as CreatedAt, 
+                   mf.field_name as FieldName, mf.display_name as DisplayName, mf.category as Category
+            FROM metadata_values mv 
+            JOIN metadata_fields mf ON mv.field_id = mf.id 
+            WHERE mv.file_id = @FileId";
         return await connection.QueryAsync<MetadataValue>(sql, new { FileId = fileId });
+    }
+
+    public async Task<IEnumerable<MetadataField>> GetAllFieldsAsync()
+    {
+        using var connection = CreateConnection();
+        return await connection.QueryAsync<MetadataField>("SELECT * FROM metadata_fields ORDER BY category, field_name");
     }
 }

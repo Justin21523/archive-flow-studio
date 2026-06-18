@@ -10,6 +10,8 @@ public class MetadataValue
     public string? ValueText { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     
-    // 方便 UI 顯示 (Join 後填入)
+    // Joined properties from MetadataField
     public string FieldName { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
 }
