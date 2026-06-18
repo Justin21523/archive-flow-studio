@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ArchiveFlow.Application.Interfaces;
@@ -19,7 +21,7 @@ public partial class NodeCanvasViewModel : ObservableObject
 {
     private readonly IFileRepository _fileRepository;
     private readonly IMetadataRepository _metadataRepository;
-    private readonly ISearchService _searchService; 
+    private readonly ISearchService _searchService;
     private readonly ILogger<NodeCanvasViewModel> _logger;
 
     public ObservableCollection<NodeViewModel> Nodes { get; } = new();
@@ -27,17 +29,10 @@ public partial class NodeCanvasViewModel : ObservableObject
     public ObservableCollection<FileRecord> ResultFiles { get; } = new();
     public ObservableCollection<MetadataValue> SelectedFileMetadata { get; } = new();
 
-    [ObservableProperty]
-    private string _executionLog = "Ready.";
-
-    [ObservableProperty]
-    private string _tempEdgePath = string.Empty;
-
-    [ObservableProperty]
-    private bool _isConnecting;
-
-    [ObservableProperty]
-    private FileRecord? _selectedFile;
+    [ObservableProperty] private string _executionLog = "Ready. Click buttons to add nodes.";
+    [ObservableProperty] private string _tempEdgePath = string.Empty;
+    [ObservableProperty] private bool _isConnecting;
+    [ObservableProperty] private FileRecord? _selectedFile;
 
     private PortViewModel? _connectingSourcePort;
 
@@ -51,11 +46,19 @@ public partial class NodeCanvasViewModel : ObservableObject
         _metadataRepository = metadataRepository;
         _searchService = searchService;
         _logger = logger;
+        
+        _logger.LogInformation("NodeCanvasViewModel constructor called");
+        // 同步初始化，確保 UI 一啟動就有節點
         InitializeDefaultNodes();
     }
 
     private void InitializeDefaultNodes()
     {
+        _logger.LogInformation("Initializing default nodes...");
+        
+        Nodes.Clear();
+        Edges.Clear();
+        
         var allNode = new NodeViewModel("All Files", "AllFiles", 100, 150);
         var resultNode = new NodeViewModel("Result Table", "Result", 600, 150);
         
@@ -66,32 +69,46 @@ public partial class NodeCanvasViewModel : ObservableObject
         Edges.Add(edge);
         
         RecalculateLayout();
+        ExecutionLog = $"Initialized with {Nodes.Count} nodes. Click buttons to add more.";
+        _logger.LogInformation($"Initialized with {Nodes.Count} nodes");
     }
 
     // --- Node Commands ---
-    [RelayCommand] private void AddAllFiles() => AddNodeInternal("All Files", "AllFiles", 120, 120);
-    [RelayCommand] private void AddFilterTxt() => AddNodeInternal("Filter: .txt", "FilterTxt", 340, 120);
-    [RelayCommand] private void AddFilterMd() => AddNodeInternal("Filter: .md", "FilterMd", 340, 260);
-    [RelayCommand] private void AddResultTable() => AddNodeInternal("Result Table", "Result", 620, 180);
+    [RelayCommand] private void AddAllFiles() 
+    { 
+        _logger.LogInformation("AddAllFiles command executed");
+        AddNodeInternal("All Files", "AllFiles", 100, 100); 
+    }
     
-    // Metadata Nodes
-    [RelayCommand] private void AddTagAI() => AddNodeInternal("Add Tag: AI", "AddTagAI", 420, 120);
-    [RelayCommand] private void AddSubjectCS() => AddNodeInternal("Set Subject: CS", "SetSubjectCS", 420, 240);
+    [RelayCommand] private void AddFilterTxt() => AddNodeInternal("Filter: .txt", "FilterTxt", 300, 100);
+    [RelayCommand] private void AddFilterMd() => AddNodeInternal("Filter: .md", "FilterMd", 300, 250);
+    [RelayCommand] private void AddResultTable() => AddNodeInternal("Result Table", "Result", 600, 150);
+    [RelayCommand] private void AddTagAI() => AddNodeInternal("Add Tag: AI", "AddTagAI", 400, 100);
+    [RelayCommand] private void AddSubjectCS() => AddNodeInternal("Set Subject: CS", "SetSubjectCS", 400, 200);
+    [RelayCommand] private void AddFullTextSearch() => AddNodeInternal("Full Text Search", "FullTextSearch", 300, 350, "test");
     
-    // 新增：全文搜尋節點
-    [RelayCommand] private void AddFullTextSearch() => AddNodeInternal("Full Text Search", "FullTextSearch", 340, 400, "test");
+    // 新增：Export 節點
+    [RelayCommand] private void AddExportCsv() => AddNodeInternal("Export CSV", "ExportCsv", 700, 100, "output.csv");
+    [RelayCommand] private void AddExportJson() => AddNodeInternal("Export JSON", "ExportJson", 700, 200, "output.json");
 
     private void AddNodeInternal(string title, string type, double x, double y, string defaultParam = "")
     {
-        var offset = (Nodes.Count % 7) * 28;
-        var newNode = new NodeViewModel(title, type, x + offset, y + offset, defaultParam);
+        double offsetX = (Nodes.Count % 5) * 30;
+        var newNode = new NodeViewModel(title, type, x + offsetX, y + offsetX, defaultParam);
         Nodes.Add(newNode);
         RecalculateLayout();
         ExecutionLog += $"Added: {title}\n";
+        _logger.LogInformation($"Added node: {title}");
     }
 
     // --- Connection & Drag ---
-    public void StartConnection(PortViewModel sourcePort) { _connectingSourcePort = sourcePort; IsConnecting = true; TempEdgePath = string.Empty; }
+    public void StartConnection(PortViewModel sourcePort) 
+    { 
+        _connectingSourcePort = sourcePort; 
+        IsConnecting = true; 
+        TempEdgePath = string.Empty; 
+    }
+    
     public void UpdateTempConnection(double currentX, double currentY)
     {
         if (!IsConnecting || _connectingSourcePort == null) return;
@@ -99,16 +116,20 @@ public partial class NodeCanvasViewModel : ObservableObject
         double dx = Math.Abs(currentX - x1) * 0.5;
         TempEdgePath = $"M {x1},{y1} C {x1 + dx},{y1} {currentX - dx},{currentY} {currentX},{currentY}";
     }
+    
     public void FinishConnection(PortViewModel targetPort)
     {
         if (_connectingSourcePort == null || targetPort == _connectingSourcePort) { CancelConnection(); return; }
-        if (!targetPort.IsInput || _connectingSourcePort.IsInput) { CancelConnection(); return; }
-        if (targetPort.ParentNode == _connectingSourcePort.ParentNode) { CancelConnection(); return; }
+        if (_connectingSourcePort.IsInput || !targetPort.IsInput) { CancelConnection(); return; }
+        if (_connectingSourcePort.ParentNode == targetPort.ParentNode) { CancelConnection(); return; }
         if (Edges.Any(e => e.Source == _connectingSourcePort && e.Target == targetPort)) { CancelConnection(); return; }
         var newEdge = new EdgeViewModel(_connectingSourcePort, targetPort);
-        Edges.Add(newEdge); newEdge.UpdateGeometry();
+        Edges.Add(newEdge); 
+        newEdge.UpdateGeometry();
+        ExecutionLog += "Connected nodes.\n";
         CancelConnection();
     }
+
     public bool TryFinishConnectionAt(double x, double y)
     {
         if (_connectingSourcePort == null) return false;
@@ -131,25 +152,41 @@ public partial class NodeCanvasViewModel : ObservableObject
         FinishConnection(targetPort);
         return true;
     }
-    public void CancelConnection() { _connectingSourcePort = null; IsConnecting = false; TempEdgePath = string.Empty; }
-    public void UpdateNodePosition(NodeViewModel node, double newX, double newY) { node.X = Math.Max(0, newX); node.Y = Math.Max(0, newY); RecalculateLayout(); }
+    
+    public void CancelConnection() 
+    { 
+        _connectingSourcePort = null; 
+        IsConnecting = false; 
+        TempEdgePath = string.Empty; 
+    }
+    
+    public void UpdateNodePosition(NodeViewModel node, double newX, double newY) 
+    { 
+        node.X = Math.Max(0, newX); 
+        node.Y = Math.Max(0, newY); 
+        RecalculateLayout(); 
+    }
+    
     public void RecalculateLayout()
     {
-        foreach (var node in Nodes) {
-            node.InputPort.AbsoluteX = node.X + node.InputPort.RelativeX; node.InputPort.AbsoluteY = node.Y + node.InputPort.RelativeY;
-            node.OutputPort.AbsoluteX = node.X + node.OutputPort.RelativeX; node.OutputPort.AbsoluteY = node.Y + node.OutputPort.RelativeY;
+        foreach (var node in Nodes) 
+        {
+            node.InputPort.AbsoluteX = node.X + node.InputPort.RelativeX; 
+            node.InputPort.AbsoluteY = node.Y + node.InputPort.RelativeY;
+            node.OutputPort.AbsoluteX = node.X + node.OutputPort.RelativeX; 
+            node.OutputPort.AbsoluteY = node.Y + node.OutputPort.RelativeY;
         }
         foreach (var edge in Edges) edge.UpdateGeometry();
     }
 
-    // --- Selection & Inspector ---
-    public void SelectFile(FileRecord? file)
+    public void SelectFile(FileRecord? file) 
     {
-        SelectedFile = file;
+        SelectedFile = file; 
         SelectedFileMetadata.Clear();
         if (file != null)
         {
-            Task.Run(async () => {
+            Task.Run(async () => 
+            {
                 var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
                 foreach (var m in metadata) SelectedFileMetadata.Add(m);
             });
@@ -160,7 +197,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     [RelayCommand]
     private async Task ExecuteWorkflowAsync()
     {
-        ExecutionLog = "Executing...\n";
+        ExecutionLog = "Executing workflow...\n";
         ResultFiles.Clear();
         SelectedFileMetadata.Clear();
         SelectedFile = null;
@@ -168,6 +205,8 @@ public partial class NodeCanvasViewModel : ObservableObject
         try
         {
             var sortedNodes = GetTopologicalOrder();
+            _logger.LogInformation($"Executing {sortedNodes.Count} nodes in order: {string.Join(" -> ", sortedNodes.Select(n => n.Title))}");
+            
             var context = new NodeExecutionContext();
 
             foreach (var nodeVm in sortedNodes)
@@ -180,24 +219,51 @@ public partial class NodeCanvasViewModel : ObservableObject
             }
 
             foreach (var file in context.CurrentFileSet) ResultFiles.Add(file);
-            ExecutionLog += $"Done. Total: {ResultFiles.Count}\n";
+            ExecutionLog += $"\nWorkflow completed. Total: {ResultFiles.Count} files\n";
+            _logger.LogInformation($"Workflow completed. Result: {ResultFiles.Count} files");
         }
-        catch (Exception ex) { ExecutionLog += $"Error: {ex.Message}\n"; }
+        catch (Exception ex) 
+        { 
+            _logger.LogError(ex, "Workflow execution failed");
+            ExecutionLog += $"Error: {ex.Message}\n{ex.StackTrace}\n"; 
+        }
     }
 
     private List<NodeViewModel> GetTopologicalOrder()
     {
-        var inDegree = new Dictionary<Guid, int>(); var adj = new Dictionary<Guid, List<Guid>>();
-        foreach (var node in Nodes) { inDegree[node.Id] = 0; adj[node.Id] = new List<Guid>(); }
-        foreach (var edge in Edges) { adj[edge.Source.ParentNode.Id].Add(edge.Target.ParentNode.Id); inDegree[edge.Target.ParentNode.Id]++; }
+        var inDegree = new Dictionary<Guid, int>(); 
+        var adj = new Dictionary<Guid, List<Guid>>();
+        
+        foreach (var node in Nodes) 
+        { 
+            inDegree[node.Id] = 0; 
+            adj[node.Id] = new List<Guid>(); 
+        }
+        
+        foreach (var edge in Edges) 
+        { 
+            adj[edge.Source.ParentNode.Id].Add(edge.Target.ParentNode.Id); 
+            inDegree[edge.Target.ParentNode.Id]++; 
+        }
+        
         var queue = new Queue<Guid>();
         foreach (var kvp in inDegree) if (kvp.Value == 0) queue.Enqueue(kvp.Key);
+        
         var sortedIds = new List<Guid>();
-        while (queue.Count > 0) {
-            var curr = queue.Dequeue(); sortedIds.Add(curr);
-            foreach (var neighbor in adj[curr]) { inDegree[neighbor]--; if (inDegree[neighbor] == 0) queue.Enqueue(neighbor); }
+        while (queue.Count > 0) 
+        {
+            var curr = queue.Dequeue(); 
+            sortedIds.Add(curr);
+            foreach (var neighbor in adj[curr]) 
+            { 
+                inDegree[neighbor]--; 
+                if (inDegree[neighbor] == 0) queue.Enqueue(neighbor); 
+            }
         }
-        return Nodes.Where(n => sortedIds.Contains(n.Id)).OrderBy(n => sortedIds.IndexOf(n.Id)).ToList();
+        
+        return Nodes.Where(n => sortedIds.Contains(n.Id))
+                    .OrderBy(n => sortedIds.IndexOf(n.Id))
+                    .ToList();
     }
 
     private IArchiveNode CreateBackendNode(NodeViewModel vm)
@@ -207,17 +273,22 @@ public partial class NodeCanvasViewModel : ObservableObject
             "AllFiles" => new AllFilesNode(_fileRepository, _searchService),
             "FilterTxt" => new FileTypeFilterNode(".txt"),
             "FilterMd" => new FileTypeFilterNode(".md"),
-            "FullTextSearch" => new FullTextSearchNode(_searchService, vm.ParameterValue),
             "Result" => new PassThroughNode(),
             "AddTagAI" => new AddTagNode(_metadataRepository, "AI"),
             "SetSubjectCS" => new SetSubjectNode(_metadataRepository, "Computer Science"),
-            _ => throw new InvalidOperationException($"Unknown: {vm.NodeType}")
+            "FullTextSearch" => new FullTextSearchNode(_searchService, vm.ParameterValue),
+            "ExportCsv" => new ExportCsvNode(vm.ParameterValue),
+            "ExportJson" => new ExportJsonNode(vm.ParameterValue),
+            _ => throw new InvalidOperationException($"Unknown node type: {vm.NodeType}")
         };
     }
 }
 
 public class PassThroughNode : IArchiveNode
 {
-    public Guid Id { get; } = Guid.NewGuid(); public string DisplayName => "Result"; public double X { get; set; } public double Y { get; set; }
+    public Guid Id { get; } = Guid.NewGuid(); 
+    public string DisplayName => "Result Table"; 
+    public double X { get; set; } 
+    public double Y { get; set; }
     public Task ExecuteAsync(NodeExecutionContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

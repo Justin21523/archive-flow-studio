@@ -26,7 +26,11 @@
                 
                 <TextBlock Text="Search" Foreground="Gray" Margin="0,10,0,5"/>
                 <Button Content="Full Text Search" Command="{Binding AddFullTextSearchCommand}" Margin="0,2"/>
-
+                
+                <TextBlock Text="Export" Foreground="Gray" Margin="0,10,0,5"/>
+                <Button Content="Export CSV" Command="{Binding AddExportCsvCommand}" Margin="0,2"/>
+                <Button Content="Export JSON" Command="{Binding AddExportJsonCommand}" Margin="0,2"/>
+                
                 <TextBlock Text="Outputs" Foreground="Gray" Margin="0,10,0,5"/>
                 <Button Content="Result Table" Command="{Binding AddResultTableCommand}" Margin="0,2"/>
                 
