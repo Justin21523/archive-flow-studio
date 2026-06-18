@@ -1,6 +1,12 @@
+using System;
+using System.Collections.Generic;
 using System.Data;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using ArchiveFlow.Application.Interfaces;
 using ArchiveFlow.Domain.Entities;
+using ArchiveFlow.Domain.Enums;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -14,13 +20,13 @@ public class SqliteFileRepository : IFileRepository
 
     public SqliteFileRepository(ILogger<SqliteFileRepository> logger)
     {
-        var dbPath = Path.Combine(
+        var dbPath = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "ArchiveFlow",
             "archiveflow.db"
         );
         
-        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(dbPath)!);
         
         _connectionString = $"Data Source={dbPath};";
         _logger = logger;
@@ -54,7 +60,8 @@ public class SqliteFileRepository : IFileRepository
     {
         const string sql = "SELECT * FROM files ORDER BY imported_at DESC;";
         using var connection = CreateConnection();
-        return await connection.QueryAsync<FileRecord>(sql);
+        var records = await connection.QueryAsync<FileRecord>(sql);
+        return records.ToList();
     }
 
     public async Task<FileRecord?> GetByHashAsync(string fileHash, CancellationToken cancellationToken = default)

@@ -1,16 +1,17 @@
 using System;
-using System.Collections.ObjectModel;
-using Avalonia;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ArchiveFlow.App.ViewModels;
 
 public partial class NodeViewModel : ObservableObject
 {
-    public Guid NodeId { get; }
+    public Guid Id { get; } = Guid.NewGuid();
 
     [ObservableProperty]
     private string _title = string.Empty;
+
+    [ObservableProperty]
+    private string _nodeType = string.Empty; // e.g., "AllFiles", "Filter", "Result"
 
     [ObservableProperty]
     private double _x;
@@ -21,59 +22,45 @@ public partial class NodeViewModel : ObservableObject
     [ObservableProperty]
     private string _status = "Idle";
 
-    [ObservableProperty]
-    private bool _isSelected;
+    public PortViewModel InputPort { get; }
+    public PortViewModel OutputPort { get; }
 
-    public ObservableCollection<EdgeViewModel> OutputEdges { get; } = new();
-
-    public NodeViewModel(string title, double x, double y)
+    public NodeViewModel(string title, string nodeType, double x, double y)
     {
-        NodeId = Guid.NewGuid();
         Title = title;
+        NodeType = nodeType;
         X = x;
         Y = y;
+        
+        // Ports are relative to the node's top-left corner. 
+        // Node size is assumed to be 200x100 in UI.
+        InputPort = new PortViewModel(this, true, 0, 50);
+        OutputPort = new PortViewModel(this, false, 200, 50);
     }
 }
 
-public partial class EdgeViewModel : ObservableObject
+public partial class PortViewModel : ObservableObject
 {
     public Guid Id { get; } = Guid.NewGuid();
-    public NodeViewModel Source { get; }
-    public NodeViewModel Target { get; }
+    public NodeViewModel ParentNode { get; }
+    public bool IsInput { get; }
+    
+    // Relative position within the NodeView
+    public double RelativeX { get; }
+    public double RelativeY { get; }
+
+    // Absolute position on the Canvas (calculated by Canvas)
+    [ObservableProperty]
+    private double _absoluteX;
 
     [ObservableProperty]
-    private Point _startPoint;
+    private double _absoluteY;
 
-    [ObservableProperty]
-    private Point _endPoint;
-
-    public EdgeViewModel(NodeViewModel source, NodeViewModel target)
+    public PortViewModel(NodeViewModel parentNode, bool isInput, double relX, double relY)
     {
-        Source = source;
-        Target = target;
-        
-        // Initial calculation
-        UpdatePoints();
-
-        // Listen to position changes of source and target nodes
-        Source.PropertyChanged += (s, e) => 
-        {
-            if (e.PropertyName == nameof(NodeViewModel.X) || e.PropertyName == nameof(NodeViewModel.Y))
-                UpdatePoints();
-        };
-        
-        Target.PropertyChanged += (s, e) => 
-        {
-            if (e.PropertyName == nameof(NodeViewModel.X) || e.PropertyName == nameof(NodeViewModel.Y))
-                UpdatePoints();
-        };
-    }
-
-    private void UpdatePoints()
-    {
-        // Assuming NodeView size is roughly 200x100
-        // Connect from right-center of Source to left-center of Target
-        StartPoint = new Point(Source.X + 200, Source.Y + 50);
-        EndPoint = new Point(Target.X, Target.Y + 50);
+        ParentNode = parentNode;
+        IsInput = isInput;
+        RelativeX = relX;
+        RelativeY = relY;
     }
 }

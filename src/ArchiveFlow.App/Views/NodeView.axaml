@@ -1,25 +1,39 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ArchiveFlow.App.ViewModels"
-             xmlns:conv="using:ArchiveFlow.App.Converters"
              x:Class="ArchiveFlow.App.Views.NodeView"
              x:DataType="vm:NodeViewModel"
              Width="200" Height="100">
 
-    <Border Background="#2D2D30" 
-            BorderBrush="{Binding IsSelected, Converter={x:Static conv:BoolToBrushConverter.Instance}}" 
-            BorderThickness="2" 
-            CornerRadius="8"
-            BoxShadow="0 4 6 rgba(0,0,0,0.3)"
-            PointerPressed="Node_PointerPressed"
-            PointerMoved="Node_PointerMoved"
-            PointerReleased="Node_PointerReleased">
-        <Grid RowDefinitions="Auto,*,Auto" Margin="10">
-            <TextBlock Grid.Row="0" Text="{Binding Title}" FontWeight="Bold" Foreground="White" FontSize="14"/>
-            <Border Grid.Row="1" Background="#1E1E1E" CornerRadius="4" Margin="0,5">
-                <TextBlock Text="Data Flow" Foreground="Gray" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
-            <TextBlock Grid.Row="2" Text="{Binding Status}" Foreground="#00FF00" FontSize="12" HorizontalAlignment="Right"/>
-        </Grid>
-    </Border>
+    <Canvas Width="200" Height="100" Background="Transparent">
+        <!-- Main Node Body -->
+        <Border Width="180" Height="80" 
+                Canvas.Left="10" Canvas.Top="10"
+                Background="#2D2D30" 
+                BorderBrush="#007ACC" 
+                BorderThickness="2" 
+                CornerRadius="8"
+                BoxShadow="0 4 6 rgba(0,0,0,0.5)"
+                PointerPressed="NodeBody_PointerPressed">
+            <Grid RowDefinitions="Auto,*,Auto" Margin="10,5">
+                <TextBlock Grid.Row="0" Text="{Binding Title}" FontWeight="Bold" Foreground="White" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                <Border Grid.Row="1" Background="#1E1E1E" CornerRadius="4" Margin="0,2">
+                    <TextBlock Text="{Binding NodeType}" Foreground="Gray" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10"/>
+                </Border>
+                <TextBlock Grid.Row="2" Text="{Binding Status}" Foreground="#00FF00" FontSize="10" HorizontalAlignment="Right"/>
+            </Grid>
+        </Border>
+
+        <!-- Input Port (Left) -->
+        <Ellipse Width="16" Height="16" Fill="#007ACC" Stroke="White" StrokeThickness="2"
+                 Canvas.Left="2" Canvas.Top="42"
+                 PointerReleased="InputPort_PointerReleased"
+                 Cursor="Hand"/>
+
+        <!-- Output Port (Right) -->
+        <Ellipse Width="16" Height="16" Fill="#007ACC" Stroke="White" StrokeThickness="2"
+                 Canvas.Left="182" Canvas.Top="42"
+                 PointerPressed="OutputPort_PointerPressed"
+                 Cursor="Hand"/>
+    </Canvas>
 </UserControl>

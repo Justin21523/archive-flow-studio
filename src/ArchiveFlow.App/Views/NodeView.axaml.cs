@@ -1,61 +1,52 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using ArchiveFlow.App.ViewModels;
-using System;
 
 namespace ArchiveFlow.App.Views;
 
 public partial class NodeView : UserControl
 {
-    private Point _startPoint;
-    private bool _isDragging;
-
     public NodeView()
     {
         InitializeComponent();
     }
 
-    private void Node_PointerPressed(object sender, PointerPressedEventArgs e)
+    private void NodeBody_PointerPressed(object sender, PointerPressedEventArgs e)
     {
         if (DataContext is NodeViewModel vm && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
-            _startPoint = e.GetPosition(this.Parent as Control);
-            _isDragging = true;
-            vm.IsSelected = true;
-            
-            if (DataContext is NodeViewModel nodeVm)
+            // Notify the Canvas to start dragging this node
+            var canvas = this.FindAncestor<NodeCanvasView>();
+            if (canvas != null)
             {
-                // Notify canvas to start drag
-                var canvas = this.FindAncestor<NodeCanvasView>();
-                canvas?.ViewModel?.StartDrag(nodeVm);
+                canvas.StartNodeDrag(vm, e.GetPosition(canvas));
             }
             e.Handled = true;
         }
     }
 
-    private void Node_PointerMoved(object sender, PointerEventArgs e)
+    private void OutputPort_PointerPressed(object sender, PointerPressedEventArgs e)
     {
-        if (_isDragging && DataContext is NodeViewModel vm)
+        if (DataContext is NodeViewModel vm && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
-            var currentPoint = e.GetPosition(this.Parent as Control);
-            var delta = currentPoint - _startPoint;
-            _startPoint = currentPoint;
-
             var canvas = this.FindAncestor<NodeCanvasView>();
-            canvas?.ViewModel?.MoveDrag(delta.X, delta.Y);
+            canvas?.StartConnection(vm.OutputPort, e.GetPosition(canvas));
+            e.Handled = true;
         }
     }
 
-    private void Node_PointerReleased(object sender, PointerReleasedEventArgs e)
+    private void InputPort_PointerReleased(object sender, PointerReleasedEventArgs e)
     {
-        _isDragging = false;
-        var canvas = this.FindAncestor<NodeCanvasView>();
-        canvas?.ViewModel?.EndDrag();
+        if (DataContext is NodeViewModel vm)
+        {
+            var canvas = this.FindAncestor<NodeCanvasView>();
+            canvas?.FinishConnection(vm.InputPort);
+            e.Handled = true;
+        }
     }
 }
 
-public static class VisualTreeHelper
+public static class VisualTreeExtensions
 {
     public static T? FindAncestor<T>(this Control control) where T : Control
     {

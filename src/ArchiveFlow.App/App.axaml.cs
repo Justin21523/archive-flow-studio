@@ -57,6 +57,7 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         services.AddSingleton<IFileRepository, SqliteFileRepository>();
         services.AddTransient<ArchiveFlow.Application.Workflows.WorkflowEngine>();
         services.AddTransient<ArchiveFlow.App.ViewModels.NodeCanvasViewModel>();
+        services.AddSingleton<ArchiveFlow.Application.Interfaces.IMetadataRepository, ArchiveFlow.Infrastructure.Database.Repositories.SqliteMetadataRepository>();
 
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb
