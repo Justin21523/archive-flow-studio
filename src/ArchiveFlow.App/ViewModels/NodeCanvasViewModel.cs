@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,6 +10,8 @@ using ArchiveFlow.Application.Nodes;
 using ArchiveFlow.Application.Nodes.Query;
 using ArchiveFlow.Application.Nodes.Actions;
 using ArchiveFlow.Domain.Entities;
+using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -22,6 +25,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     private readonly ISearchService _searchService;
     private readonly ILogger<NodeCanvasViewModel> _logger;
     private readonly IWorkflowStorageService _workflowStorage; 
+    private readonly IFilePreviewService _previewService;
 
     public ObservableCollection<NodeViewModel> Nodes { get; } = new();
     public ObservableCollection<EdgeViewModel> Edges { get; } = new();
@@ -32,6 +36,8 @@ public partial class NodeCanvasViewModel : ObservableObject
     [ObservableProperty] private string _tempEdgePath = string.Empty;
     [ObservableProperty] private bool _isConnecting;
     [ObservableProperty] private FileRecord? _selectedFile;
+    [ObservableProperty] private Avalonia.Media.Imaging.Bitmap? _selectedFileThumbnail;
+    [ObservableProperty] private string _selectedFilePreviewText = string.Empty;
 
     private PortViewModel? _connectingSourcePort;
 
@@ -40,11 +46,13 @@ public partial class NodeCanvasViewModel : ObservableObject
         IMetadataRepository metadataRepository,
         ISearchService searchService,
         IWorkflowStorageService workflowStorage, 
+        IFilePreviewService previewService,
         ILogger<NodeCanvasViewModel> logger)
     {
         _fileRepository = fileRepository;
         _metadataRepository = metadataRepository;
         _searchService = searchService;
+        _previewService = previewService;
         _logger = logger;
         
         _logger.LogInformation("NodeCanvasViewModel constructor called");
@@ -176,18 +184,42 @@ public partial class NodeCanvasViewModel : ObservableObject
     {
         SelectedFile = file; 
         SelectedFileMetadata.Clear();
-        if (file != null)
+        SelectedFileThumbnail = null;
+        SelectedFilePreviewText = string.Empty;
+
+        if (file == null)
         {
-            try
+            return;
+        }
+
+        try
+        {
+            var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
+            SelectedFileMetadata.Clear();
+            foreach (var item in metadata)
             {
-                var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
-                foreach (var m in metadata) SelectedFileMetadata.Add(m);
+                SelectedFileMetadata.Add(item);
             }
-            catch (Exception ex)
+
+            if (!string.IsNullOrWhiteSpace(file.ThumbnailPath) && File.Exists(file.ThumbnailPath))
             {
-                _logger.LogError(ex, "Failed to load metadata for file {FileId}", file.Id);
-                ExecutionLog += $"Metadata load error: {ex.Message}\n";
+                await using var stream = File.OpenRead(file.ThumbnailPath);
+                var bitmap = await Task.Run(() => new Bitmap(stream));
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    SelectedFileThumbnail = bitmap;
+                    SelectedFilePreviewText = string.Empty;
+                });
             }
+            else if (!string.IsNullOrWhiteSpace(file.ContentPreview))
+            {
+                SelectedFilePreviewText = file.ContentPreview;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load preview for file {FileId}", file.Id);
+            ExecutionLog += $"Preview load error: {ex.Message}\n";
         }
     }
 
@@ -243,7 +275,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     {
         return vm.NodeType switch
         {
-            "AllFiles" => new AllFilesNode(_fileRepository, _searchService),
+            "AllFiles" => new AllFilesNode(_fileRepository, _searchService, _previewService), 
             "FilterTxt" => new FileTypeFilterNode(".txt"),
             "FilterMd" => new FileTypeFilterNode(".md"),
             "Result" => new PassThroughNode(),

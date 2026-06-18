@@ -20,7 +20,9 @@ public class FileRecord
     public DateTime ImportedAt { get; private set; }
     public DateTime? ModifiedAt { get; private set; }
     public DateTime? LastScannedAt { get; private set; }
-
+    public string? ThumbnailPath { get; set; }
+    public string? ContentPreview { get; set; }
+    
     // Parameterless constructor for Dapper
     public FileRecord() { }
 

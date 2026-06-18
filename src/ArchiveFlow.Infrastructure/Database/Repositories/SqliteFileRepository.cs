@@ -54,4 +54,16 @@ public class SqliteFileRepository : IFileRepository
         using var connection = CreateConnection();
         return await connection.QueryFirstOrDefaultAsync<FileRecord>("SELECT * FROM files WHERE file_hash = @FileHash LIMIT 1;", new { FileHash = fileHash });
     }
+    
+    public async Task UpdatePreviewAsync(FileRecord record)
+    {
+        const string sql = @"
+            UPDATE files 
+            SET thumbnail_path = @ThumbnailPath, content_preview = @ContentPreview 
+            WHERE id = @Id";
+        
+        using var connection = CreateConnection();
+        await connection.ExecuteAsync(sql, record);
+    }
+
 }
