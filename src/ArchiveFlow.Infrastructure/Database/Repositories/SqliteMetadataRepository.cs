@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Threading.Tasks;
 using ArchiveFlow.Application.Interfaces;
 using ArchiveFlow.Domain.Entities;
@@ -17,11 +18,9 @@ public class SqliteMetadataRepository : IMetadataRepository
 
     public SqliteMetadataRepository(ILogger<SqliteMetadataRepository> logger)
     {
-        var dbPath = System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ArchiveFlow",
-            "archiveflow.db"
-        );
+        // 修改：使用專案根目錄下的 Data 資料夾
+        var dbPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "archiveflow.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
         _connectionString = $"Data Source={dbPath};";
         _logger = logger;
     }
@@ -31,26 +30,18 @@ public class SqliteMetadataRepository : IMetadataRepository
     public async Task<MetadataField?> GetOrCreateFieldAsync(string fieldName, string displayName, string fieldType = "String")
     {
         using var connection = CreateConnection();
-        var field = await connection.QueryFirstOrDefaultAsync<MetadataField>(
-            "SELECT * FROM metadata_fields WHERE field_name = @FieldName", 
-            new { FieldName = fieldName });
-
+        var field = await connection.QueryFirstOrDefaultAsync<MetadataField>("SELECT * FROM metadata_fields WHERE field_name = @FieldName", new { FieldName = fieldName });
         if (field != null) return field;
 
-        await connection.ExecuteAsync(
-            "INSERT INTO metadata_fields (field_name, display_name, field_type) VALUES (@FieldName, @DisplayName, @FieldType)",
+        await connection.ExecuteAsync("INSERT INTO metadata_fields (field_name, display_name, field_type) VALUES (@FieldName, @DisplayName, @FieldType)",
             new { FieldName = fieldName, DisplayName = displayName, FieldType = fieldType });
-
-        return await connection.QueryFirstOrDefaultAsync<MetadataField>(
-            "SELECT * FROM metadata_fields WHERE field_name = @FieldName", 
-            new { FieldName = fieldName });
+        return await connection.QueryFirstOrDefaultAsync<MetadataField>("SELECT * FROM metadata_fields WHERE field_name = @FieldName", new { FieldName = fieldName });
     }
 
     public async Task AddMetadataValueAsync(string fileId, int fieldId, string valueText)
     {
         using var connection = CreateConnection();
-        await connection.ExecuteAsync(
-            "INSERT INTO metadata_values (file_id, field_id, value_text, created_at) VALUES (@FileId, @FieldId, @ValueText, @CreatedAt)",
+        await connection.ExecuteAsync("INSERT INTO metadata_values (file_id, field_id, value_text, created_at) VALUES (@FileId, @FieldId, @ValueText, @CreatedAt)",
             new { FileId = fileId, FieldId = fieldId, ValueText = valueText, CreatedAt = DateTime.UtcNow });
     }
 
@@ -59,9 +50,7 @@ public class SqliteMetadataRepository : IMetadataRepository
         using var connection = CreateConnection();
         const string sql = @"
             SELECT mv.id, mv.file_id as FileId, mv.field_id as FieldId, mv.value_text as ValueText, mv.created_at as CreatedAt, mf.field_name as FieldName
-            FROM metadata_values mv
-            JOIN metadata_fields mf ON mv.field_id = mf.id
-            WHERE mv.file_id = @FileId";
+            FROM metadata_values mv JOIN metadata_fields mf ON mv.field_id = mf.id WHERE mv.file_id = @FileId";
         return await connection.QueryAsync<MetadataValue>(sql, new { FileId = fileId });
     }
 }

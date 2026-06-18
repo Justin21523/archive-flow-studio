@@ -21,19 +21,21 @@ public partial class NodeViewModel : ObservableObject
 
     [ObservableProperty]
     private string _status = "Idle";
+    
+    // 新增：節點的參數 (例如搜尋關鍵字)
+    [ObservableProperty] 
+    private string _parameterValue = string.Empty;
 
     public PortViewModel InputPort { get; }
     public PortViewModel OutputPort { get; }
 
-    public NodeViewModel(string title, string nodeType, double x, double y)
+    public NodeViewModel(string title, string nodeType, double x, double y, string defaultParam = "")
     {
         Title = title;
         NodeType = nodeType;
-        X = x;
-        Y = y;
+        X = x; Y = y;
+        ParameterValue = defaultParam;
         
-        // Ports are relative to the node's top-left corner. 
-        // Node size is assumed to be 200x100 in UI.
         InputPort = new PortViewModel(this, true, 0, 50);
         OutputPort = new PortViewModel(this, false, 200, 50);
     }

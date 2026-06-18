@@ -19,10 +19,15 @@ public partial class NodeView : UserControl
             var canvas = this.FindAncestor<NodeCanvasView>();
             if (canvas != null)
             {
-                canvas.StartNodeDrag(vm, e.GetPosition(canvas));
+                canvas.StartNodeDrag(vm, canvas.GetCanvasPosition(e), e.Pointer);
             }
             e.Handled = true;
         }
+    }
+
+    private void TextBox_PointerPressed(object sender, PointerPressedEventArgs e)
+    {
+        e.Handled = true;
     }
 
     private void OutputPort_PointerPressed(object sender, PointerPressedEventArgs e)
@@ -30,7 +35,10 @@ public partial class NodeView : UserControl
         if (DataContext is NodeViewModel vm && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             var canvas = this.FindAncestor<NodeCanvasView>();
-            canvas?.StartConnection(vm.OutputPort, e.GetPosition(canvas));
+            if (canvas != null)
+            {
+                canvas.StartConnection(vm.OutputPort, canvas.GetCanvasPosition(e));
+            }
             e.Handled = true;
         }
     }

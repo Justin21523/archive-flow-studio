@@ -58,6 +58,7 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         services.AddTransient<ArchiveFlow.Application.Workflows.WorkflowEngine>();
         services.AddTransient<ArchiveFlow.App.ViewModels.NodeCanvasViewModel>();
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IMetadataRepository, ArchiveFlow.Infrastructure.Database.Repositories.SqliteMetadataRepository>();
+        services.AddSingleton<ArchiveFlow.Application.Interfaces.ISearchService, ArchiveFlow.Infrastructure.Search.SqliteSearchService>();
 
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb
@@ -71,11 +72,7 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
 
     private static string GetConnectionString()
     {
-        var dbPath = System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ArchiveFlow",
-            "archiveflow.db"
-        );
+        var dbPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "Data", "archiveflow.db");
         System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(dbPath)!);
         return $"Data Source={dbPath};";
     }

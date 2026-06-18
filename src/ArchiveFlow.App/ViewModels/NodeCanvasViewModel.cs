@@ -19,6 +19,7 @@ public partial class NodeCanvasViewModel : ObservableObject
 {
     private readonly IFileRepository _fileRepository;
     private readonly IMetadataRepository _metadataRepository;
+    private readonly ISearchService _searchService; 
     private readonly ILogger<NodeCanvasViewModel> _logger;
 
     public ObservableCollection<NodeViewModel> Nodes { get; } = new();
@@ -43,10 +44,12 @@ public partial class NodeCanvasViewModel : ObservableObject
     public NodeCanvasViewModel(
         IFileRepository fileRepository, 
         IMetadataRepository metadataRepository,
+        ISearchService searchService,
         ILogger<NodeCanvasViewModel> logger)
     {
         _fileRepository = fileRepository;
         _metadataRepository = metadataRepository;
+        _searchService = searchService;
         _logger = logger;
         InitializeDefaultNodes();
     }
@@ -66,19 +69,22 @@ public partial class NodeCanvasViewModel : ObservableObject
     }
 
     // --- Node Commands ---
-    [RelayCommand] private void AddAllFiles() => AddNodeInternal("All Files", "AllFiles", 100, 100);
-    [RelayCommand] private void AddFilterTxt() => AddNodeInternal("Filter: .txt", "FilterTxt", 300, 100);
-    [RelayCommand] private void AddFilterMd() => AddNodeInternal("Filter: .md", "FilterMd", 300, 250);
-    [RelayCommand] private void AddResultTable() => AddNodeInternal("Result Table", "Result", 600, 150);
+    [RelayCommand] private void AddAllFiles() => AddNodeInternal("All Files", "AllFiles", 120, 120);
+    [RelayCommand] private void AddFilterTxt() => AddNodeInternal("Filter: .txt", "FilterTxt", 340, 120);
+    [RelayCommand] private void AddFilterMd() => AddNodeInternal("Filter: .md", "FilterMd", 340, 260);
+    [RelayCommand] private void AddResultTable() => AddNodeInternal("Result Table", "Result", 620, 180);
     
     // Metadata Nodes
-    [RelayCommand] private void AddTagAI() => AddNodeInternal("Add Tag: AI", "AddTagAI", 400, 100);
-    [RelayCommand] private void AddSubjectCS() => AddNodeInternal("Set Subject: CS", "SetSubjectCS", 400, 200);
+    [RelayCommand] private void AddTagAI() => AddNodeInternal("Add Tag: AI", "AddTagAI", 420, 120);
+    [RelayCommand] private void AddSubjectCS() => AddNodeInternal("Set Subject: CS", "SetSubjectCS", 420, 240);
+    
+    // 新增：全文搜尋節點
+    [RelayCommand] private void AddFullTextSearch() => AddNodeInternal("Full Text Search", "FullTextSearch", 340, 400, "test");
 
-    private void AddNodeInternal(string title, string type, double x, double y)
+    private void AddNodeInternal(string title, string type, double x, double y, string defaultParam = "")
     {
-        double offsetX = (Nodes.Count % 5) * 30;
-        var newNode = new NodeViewModel(title, type, x + offsetX, y);
+        var offset = (Nodes.Count % 7) * 28;
+        var newNode = new NodeViewModel(title, type, x + offset, y + offset, defaultParam);
         Nodes.Add(newNode);
         RecalculateLayout();
         ExecutionLog += $"Added: {title}\n";
@@ -96,10 +102,34 @@ public partial class NodeCanvasViewModel : ObservableObject
     public void FinishConnection(PortViewModel targetPort)
     {
         if (_connectingSourcePort == null || targetPort == _connectingSourcePort) { CancelConnection(); return; }
+        if (!targetPort.IsInput || _connectingSourcePort.IsInput) { CancelConnection(); return; }
+        if (targetPort.ParentNode == _connectingSourcePort.ParentNode) { CancelConnection(); return; }
         if (Edges.Any(e => e.Source == _connectingSourcePort && e.Target == targetPort)) { CancelConnection(); return; }
         var newEdge = new EdgeViewModel(_connectingSourcePort, targetPort);
         Edges.Add(newEdge); newEdge.UpdateGeometry();
         CancelConnection();
+    }
+    public bool TryFinishConnectionAt(double x, double y)
+    {
+        if (_connectingSourcePort == null) return false;
+
+        var targetPort = Nodes
+            .Select(node => node.InputPort)
+            .Where(port => port.ParentNode != _connectingSourcePort.ParentNode)
+            .Select(port => new
+            {
+                Port = port,
+                DistanceSquared = Math.Pow(port.AbsoluteX - x, 2) + Math.Pow(port.AbsoluteY - y, 2)
+            })
+            .Where(candidate => candidate.DistanceSquared <= 24 * 24)
+            .OrderBy(candidate => candidate.DistanceSquared)
+            .Select(candidate => candidate.Port)
+            .FirstOrDefault();
+
+        if (targetPort == null) return false;
+
+        FinishConnection(targetPort);
+        return true;
     }
     public void CancelConnection() { _connectingSourcePort = null; IsConnecting = false; TempEdgePath = string.Empty; }
     public void UpdateNodePosition(NodeViewModel node, double newX, double newY) { node.X = Math.Max(0, newX); node.Y = Math.Max(0, newY); RecalculateLayout(); }
@@ -174,9 +204,10 @@ public partial class NodeCanvasViewModel : ObservableObject
     {
         return vm.NodeType switch
         {
-            "AllFiles" => new AllFilesNode(_fileRepository),
+            "AllFiles" => new AllFilesNode(_fileRepository, _searchService),
             "FilterTxt" => new FileTypeFilterNode(".txt"),
             "FilterMd" => new FileTypeFilterNode(".md"),
+            "FullTextSearch" => new FullTextSearchNode(_searchService, vm.ParameterValue),
             "Result" => new PassThroughNode(),
             "AddTagAI" => new AddTagNode(_metadataRepository, "AI"),
             "SetSubjectCS" => new SetSubjectNode(_metadataRepository, "Computer Science"),

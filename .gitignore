@@ -13,6 +13,7 @@ obj/
 *.dotCover
 
 ## Database
+Data/
 *.db
 *.db-shm
 *.db-wal
@@ -24,3 +25,4 @@ Thumbs.db
 ## Node/JS (if any WebView stuff later)
 node_modules/
 EOF
+

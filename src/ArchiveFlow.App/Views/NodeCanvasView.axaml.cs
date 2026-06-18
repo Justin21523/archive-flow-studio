@@ -18,12 +18,57 @@ public partial class NodeCanvasView : UserControl
 
     public NodeCanvasViewModel? ViewModel => DataContext as NodeCanvasViewModel;
 
+    private void NodeBody_PointerPressed(object sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is NodeViewModel vm && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            var canvas = this.FindAncestor<NodeCanvasView>();
+            canvas?.StartNodeDrag(vm, canvas.GetCanvasPosition(e), e.Pointer);
+            e.Handled = true;
+        }
+    }
+
+    // 新增：當點擊 TextBox 時，不觸發節點拖曳
+    private void TextBox_PointerPressed(object sender, PointerPressedEventArgs e)
+    {
+        e.Handled = true; 
+    }
+
+    private void OutputPort_PointerPressed(object sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is NodeViewModel vm && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            var canvas = this.FindAncestor<NodeCanvasView>();
+            if (canvas != null)
+            {
+                canvas.StartConnection(vm.OutputPort, canvas.GetCanvasPosition(e));
+            }
+            e.Handled = true;
+        }
+    }
+
+    private void InputPort_PointerReleased(object sender, PointerReleasedEventArgs e)
+    {
+        if (DataContext is NodeViewModel vm)
+        {
+            var canvas = this.FindAncestor<NodeCanvasView>();
+            canvas?.FinishConnection(vm.InputPort);
+            e.Handled = true;
+        }
+    }
+
     // Called by NodeView when dragging starts
-    public void StartNodeDrag(NodeViewModel node, Point canvasPosition)
+    public Point GetCanvasPosition(PointerEventArgs e)
+    {
+        return e.GetPosition(MainCanvas);
+    }
+
+    public void StartNodeDrag(NodeViewModel node, Point canvasPosition, IPointer pointer)
     {
         _draggedNode = node;
         // Calculate offset so the node doesn't jump to the cursor center
         _dragOffset = new Point(canvasPosition.X - node.X, canvasPosition.Y - node.Y);
+        pointer.Capture(MainCanvas);
     }
 
     private void Canvas_PointerMoved(object sender, PointerEventArgs e)
@@ -47,11 +92,15 @@ public partial class NodeCanvasView : UserControl
         if (_draggedNode != null)
         {
             _draggedNode = null;
+            e.Pointer.Capture(null);
         }
         else if (ViewModel?.IsConnecting == true)
         {
-            // Released on empty canvas space -> cancel connection
-            ViewModel.CancelConnection();
+            var pos = e.GetPosition(MainCanvas);
+            if (!ViewModel.TryFinishConnectionAt(pos.X, pos.Y))
+            {
+                ViewModel.CancelConnection();
+            }
         }
     }
 
