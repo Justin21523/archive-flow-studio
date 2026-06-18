@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Input;
 using ArchiveFlow.App.ViewModels;
@@ -10,6 +11,12 @@ public partial class NodeView : UserControl
 
     private void NodeBody_PointerPressed(object sender, PointerPressedEventArgs e)
     {
+        if (e.Source is Control sourceControl &&
+            (sourceControl is TextBox || sourceControl.FindAncestor<TextBox>() != null))
+        {
+            return;
+        }
+
         if (DataContext is NodeViewModel vm && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             var canvas = this.FindAncestor<NodeCanvasView>();
@@ -33,7 +40,7 @@ public partial class NodeView : UserControl
             var canvas = this.FindAncestor<NodeCanvasView>();
             if (canvas != null)
             {
-                canvas.StartConnection(vm.OutputPort, canvas.GetCanvasPosition(e));
+                canvas.StartConnection(vm.OutputPort, canvas.GetCanvasPosition(e), e.Pointer);
             }
             e.Handled = true;
         }

@@ -26,6 +26,10 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // DB columns are snake_case (file_name, file_extension, ...) while entities are PascalCase.
+        // Enable Dapper underscore matching so `SELECT *` maps correctly (otherwise FileName/FileExtension come back empty).
+        Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
+
         var services = new ServiceCollection();
         ConfigureServices(services);
         Services = services.BuildServiceProvider();
@@ -59,7 +63,8 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         services.AddTransient<ArchiveFlow.App.ViewModels.NodeCanvasViewModel>();
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IMetadataRepository, ArchiveFlow.Infrastructure.Database.Repositories.SqliteMetadataRepository>();
         services.AddSingleton<ArchiveFlow.Application.Interfaces.ISearchService, ArchiveFlow.Infrastructure.Search.SqliteSearchService>();
-
+        services.AddSingleton<ArchiveFlow.Application.Interfaces.IWorkflowStorageService, ArchiveFlow.Infrastructure.Storage.LocalWorkflowStorageService>();
+        
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb
                 .AddSQLite()

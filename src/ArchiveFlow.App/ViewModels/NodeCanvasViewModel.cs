@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ArchiveFlow.Application.Interfaces;
@@ -23,6 +21,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     private readonly IMetadataRepository _metadataRepository;
     private readonly ISearchService _searchService;
     private readonly ILogger<NodeCanvasViewModel> _logger;
+    private readonly IWorkflowStorageService _workflowStorage; 
 
     public ObservableCollection<NodeViewModel> Nodes { get; } = new();
     public ObservableCollection<EdgeViewModel> Edges { get; } = new();
@@ -40,6 +39,7 @@ public partial class NodeCanvasViewModel : ObservableObject
         IFileRepository fileRepository, 
         IMetadataRepository metadataRepository,
         ISearchService searchService,
+        IWorkflowStorageService workflowStorage, 
         ILogger<NodeCanvasViewModel> logger)
     {
         _fileRepository = fileRepository;
@@ -48,7 +48,7 @@ public partial class NodeCanvasViewModel : ObservableObject
         _logger = logger;
         
         _logger.LogInformation("NodeCanvasViewModel constructor called");
-        // 同步初始化，確保 UI 一啟動就有節點
+        _workflowStorage = workflowStorage;
         InitializeDefaultNodes();
     }
 
@@ -59,8 +59,8 @@ public partial class NodeCanvasViewModel : ObservableObject
         Nodes.Clear();
         Edges.Clear();
         
-        var allNode = new NodeViewModel("All Files", "AllFiles", 100, 150);
-        var resultNode = new NodeViewModel("Result Table", "Result", 600, 150);
+        var allNode = new NodeViewModel("All Files", "AllFiles", 60, 160);
+        var resultNode = new NodeViewModel("Result Table", "Result", 480, 160);
         
         Nodes.Add(allNode);
         Nodes.Add(resultNode);
@@ -69,27 +69,20 @@ public partial class NodeCanvasViewModel : ObservableObject
         Edges.Add(edge);
         
         RecalculateLayout();
-        ExecutionLog = $"Initialized with {Nodes.Count} nodes. Click buttons to add more.";
+        ExecutionLog = $"Initialized with {Nodes.Count} nodes.";
         _logger.LogInformation($"Initialized with {Nodes.Count} nodes");
     }
 
     // --- Node Commands ---
-    [RelayCommand] private void AddAllFiles() 
-    { 
-        _logger.LogInformation("AddAllFiles command executed");
-        AddNodeInternal("All Files", "AllFiles", 100, 100); 
-    }
-    
-    [RelayCommand] private void AddFilterTxt() => AddNodeInternal("Filter: .txt", "FilterTxt", 300, 100);
-    [RelayCommand] private void AddFilterMd() => AddNodeInternal("Filter: .md", "FilterMd", 300, 250);
-    [RelayCommand] private void AddResultTable() => AddNodeInternal("Result Table", "Result", 600, 150);
-    [RelayCommand] private void AddTagAI() => AddNodeInternal("Add Tag: AI", "AddTagAI", 400, 100);
-    [RelayCommand] private void AddSubjectCS() => AddNodeInternal("Set Subject: CS", "SetSubjectCS", 400, 200);
-    [RelayCommand] private void AddFullTextSearch() => AddNodeInternal("Full Text Search", "FullTextSearch", 300, 350, "test");
-    
-    // 新增：Export 節點
-    [RelayCommand] private void AddExportCsv() => AddNodeInternal("Export CSV", "ExportCsv", 700, 100, "output.csv");
-    [RelayCommand] private void AddExportJson() => AddNodeInternal("Export JSON", "ExportJson", 700, 200, "output.json");
+    [RelayCommand] private void AddAllFiles() => AddNodeInternal("All Files", "AllFiles", 60, 100);
+    [RelayCommand] private void AddFilterTxt() => AddNodeInternal("Filter: .txt", "FilterTxt", 300, 120);
+    [RelayCommand] private void AddFilterMd() => AddNodeInternal("Filter: .md", "FilterMd", 300, 280);
+    [RelayCommand] private void AddResultTable() => AddNodeInternal("Result Table", "Result", 520, 180);
+    [RelayCommand] private void AddTagAI() => AddNodeInternal("Add Tag: AI", "AddTagAI", 300, 120);
+    [RelayCommand] private void AddSubjectCS() => AddNodeInternal("Set Subject: CS", "SetSubjectCS", 300, 280);
+    [RelayCommand] private void AddFullTextSearch() => AddNodeInternal("Full Text Search", "FullTextSearch", 300, 440, "test");
+    [RelayCommand] private void AddExportCsv() => AddNodeInternal("Export CSV", "ExportCsv", 520, 120, "output.csv");
+    [RelayCommand] private void AddExportJson() => AddNodeInternal("Export JSON", "ExportJson", 520, 300, "output.json");
 
     private void AddNodeInternal(string title, string type, double x, double y, string defaultParam = "")
     {
@@ -98,7 +91,7 @@ public partial class NodeCanvasViewModel : ObservableObject
         Nodes.Add(newNode);
         RecalculateLayout();
         ExecutionLog += $"Added: {title}\n";
-        _logger.LogInformation($"Added node: {title}");
+        _logger.LogInformation("Added node: {Title}", title);
     }
 
     // --- Connection & Drag ---
@@ -179,17 +172,22 @@ public partial class NodeCanvasViewModel : ObservableObject
         foreach (var edge in Edges) edge.UpdateGeometry();
     }
 
-    public void SelectFile(FileRecord? file) 
+    public async void SelectFile(FileRecord? file) 
     {
         SelectedFile = file; 
         SelectedFileMetadata.Clear();
         if (file != null)
         {
-            Task.Run(async () => 
+            try
             {
                 var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
                 foreach (var m in metadata) SelectedFileMetadata.Add(m);
-            });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load metadata for file {FileId}", file.Id);
+                ExecutionLog += $"Metadata load error: {ex.Message}\n";
+            }
         }
     }
 
@@ -205,7 +203,7 @@ public partial class NodeCanvasViewModel : ObservableObject
         try
         {
             var sortedNodes = GetTopologicalOrder();
-            _logger.LogInformation($"Executing {sortedNodes.Count} nodes in order: {string.Join(" -> ", sortedNodes.Select(n => n.Title))}");
+            _logger.LogInformation($"Executing {sortedNodes.Count} nodes");
             
             var context = new NodeExecutionContext();
 
@@ -220,12 +218,11 @@ public partial class NodeCanvasViewModel : ObservableObject
 
             foreach (var file in context.CurrentFileSet) ResultFiles.Add(file);
             ExecutionLog += $"\nWorkflow completed. Total: {ResultFiles.Count} files\n";
-            _logger.LogInformation($"Workflow completed. Result: {ResultFiles.Count} files");
         }
         catch (Exception ex) 
         { 
-            _logger.LogError(ex, "Workflow execution failed");
-            ExecutionLog += $"Error: {ex.Message}\n{ex.StackTrace}\n"; 
+            _logger.LogError(ex, "Workflow failed");
+            ExecutionLog += $"Error: {ex.Message}\n"; 
         }
     }
 
@@ -233,37 +230,13 @@ public partial class NodeCanvasViewModel : ObservableObject
     {
         var inDegree = new Dictionary<Guid, int>(); 
         var adj = new Dictionary<Guid, List<Guid>>();
-        
-        foreach (var node in Nodes) 
-        { 
-            inDegree[node.Id] = 0; 
-            adj[node.Id] = new List<Guid>(); 
-        }
-        
-        foreach (var edge in Edges) 
-        { 
-            adj[edge.Source.ParentNode.Id].Add(edge.Target.ParentNode.Id); 
-            inDegree[edge.Target.ParentNode.Id]++; 
-        }
-        
+        foreach (var node in Nodes) { inDegree[node.Id] = 0; adj[node.Id] = new List<Guid>(); }
+        foreach (var edge in Edges) { adj[edge.Source.ParentNode.Id].Add(edge.Target.ParentNode.Id); inDegree[edge.Target.ParentNode.Id]++; }
         var queue = new Queue<Guid>();
         foreach (var kvp in inDegree) if (kvp.Value == 0) queue.Enqueue(kvp.Key);
-        
         var sortedIds = new List<Guid>();
-        while (queue.Count > 0) 
-        {
-            var curr = queue.Dequeue(); 
-            sortedIds.Add(curr);
-            foreach (var neighbor in adj[curr]) 
-            { 
-                inDegree[neighbor]--; 
-                if (inDegree[neighbor] == 0) queue.Enqueue(neighbor); 
-            }
-        }
-        
-        return Nodes.Where(n => sortedIds.Contains(n.Id))
-                    .OrderBy(n => sortedIds.IndexOf(n.Id))
-                    .ToList();
+        while (queue.Count > 0) { var curr = queue.Dequeue(); sortedIds.Add(curr); foreach (var n in adj[curr]) { inDegree[n]--; if (inDegree[n] == 0) queue.Enqueue(n); } }
+        return Nodes.Where(n => sortedIds.Contains(n.Id)).OrderBy(n => sortedIds.IndexOf(n.Id)).ToList();
     }
 
     private IArchiveNode CreateBackendNode(NodeViewModel vm)
@@ -279,16 +252,93 @@ public partial class NodeCanvasViewModel : ObservableObject
             "FullTextSearch" => new FullTextSearchNode(_searchService, vm.ParameterValue),
             "ExportCsv" => new ExportCsvNode(vm.ParameterValue),
             "ExportJson" => new ExportJsonNode(vm.ParameterValue),
-            _ => throw new InvalidOperationException($"Unknown node type: {vm.NodeType}")
+            _ => throw new InvalidOperationException($"Unknown: {vm.NodeType}")
         };
+    }
+
+    // --- 新增：Save/Load Workflow ---
+
+    [RelayCommand]
+    private async Task SaveWorkflowAsync()
+    {
+        try
+        {
+            var dto = new ArchiveFlow.Application.DTOs.WorkflowDto
+            {
+                Name = "MyWorkflow", // 未來可以改成讓使用者輸入
+                Nodes = Nodes.Select(n => new ArchiveFlow.Application.DTOs.NodeDto
+                {
+                    Id = n.Id.ToString(),
+                    Type = n.NodeType,
+                    Title = n.Title,
+                    X = n.X,
+                    Y = n.Y,
+                    Parameter = n.ParameterValue
+                }).ToList(),
+                Connections = Edges.Select(e => new ArchiveFlow.Application.DTOs.ConnectionDto
+                {
+                    SourceNodeId = e.Source.ParentNode.Id.ToString(),
+                    TargetNodeId = e.Target.ParentNode.Id.ToString()
+                }).ToList()
+            };
+
+            await _workflowStorage.SaveWorkflowAsync("current_workflow", dto);
+            ExecutionLog += "Workflow saved successfully.\n";
+        }
+        catch (Exception ex)
+        {
+            ExecutionLog += $"Error saving workflow: {ex.Message}\n";
+        }
+    }
+
+    [RelayCommand]
+    private async Task LoadWorkflowAsync()
+    {
+        try
+        {
+            var dto = await _workflowStorage.LoadWorkflowAsync("current_workflow");
+            if (dto == null)
+            {
+                ExecutionLog += "No saved workflow found.\n";
+                return;
+            }
+
+            // 清空現有狀態
+            Nodes.Clear();
+            Edges.Clear();
+            
+            // 重建節點
+            var nodeMap = new Dictionary<string, NodeViewModel>();
+            foreach (var nodeDto in dto.Nodes)
+            {
+                var id = Guid.Parse(nodeDto.Id);
+                var node = new NodeViewModel(id, nodeDto.Title, nodeDto.Type, nodeDto.X, nodeDto.Y, nodeDto.Parameter);
+                Nodes.Add(node);
+                nodeMap[nodeDto.Id] = node;
+            }
+            // 重建連線
+            foreach (var connDto in dto.Connections)
+            {
+                if (nodeMap.TryGetValue(connDto.SourceNodeId, out var sourceNode) &&
+                    nodeMap.TryGetValue(connDto.TargetNodeId, out var targetNode))
+                {
+                    var edge = new EdgeViewModel(sourceNode.OutputPort, targetNode.InputPort);
+                    Edges.Add(edge);
+                }
+            }
+
+            RecalculateLayout();
+            ExecutionLog += $"Workflow loaded. {Nodes.Count} nodes, {Edges.Count} connections.\n";
+        }
+        catch (Exception ex)
+        {
+            ExecutionLog += $"Error loading workflow: {ex.Message}\n";
+        }
     }
 }
 
 public class PassThroughNode : IArchiveNode
 {
-    public Guid Id { get; } = Guid.NewGuid(); 
-    public string DisplayName => "Result Table"; 
-    public double X { get; set; } 
-    public double Y { get; set; }
+    public Guid Id { get; } = Guid.NewGuid(); public string DisplayName => "Result"; public double X { get; set; } public double Y { get; set; }
     public Task ExecuteAsync(NodeExecutionContext context, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

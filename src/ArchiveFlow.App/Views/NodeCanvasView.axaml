@@ -5,7 +5,6 @@
              x:Class="ArchiveFlow.App.Views.NodeCanvasView"
              x:DataType="vm:NodeCanvasViewModel">
 
-    <!-- 三欄佈局：左側工具庫，中間畫布，右側檢查器 -->
     <Grid ColumnDefinitions="200,*,300">
         
         <!-- 左側：Node Library -->
@@ -20,7 +19,7 @@
                 <Button Content="Filter .txt" Command="{Binding AddFilterTxtCommand}" Margin="0,2"/>
                 <Button Content="Filter .md" Command="{Binding AddFilterMdCommand}" Margin="0,2"/>
                 
-                <TextBlock Text="Actions (Metadata)" Foreground="Gray" Margin="0,10,0,5"/>
+                <TextBlock Text="Actions" Foreground="Gray" Margin="0,10,0,5"/>
                 <Button Content="Add Tag: AI" Command="{Binding AddTagAICommand}" Margin="0,2"/>
                 <Button Content="Set Subject: CS" Command="{Binding AddSubjectCSCommand}" Margin="0,2"/>
                 
@@ -36,62 +35,46 @@
                 
                 <Border Height="1" Background="Gray" Margin="0,15"/>
                 <Button Content="Execute Workflow" Command="{Binding ExecuteWorkflowCommand}" Classes="accent" Margin="0,5"/>
+                <Border Height="1" Background="Gray" Margin="0,10"/>
+                
+                <TextBlock Text="Workflow" Foreground="Gray" Margin="0,5"/>
+                <Button Content="Save Workflow" Command="{Binding SaveWorkflowCommand}" Margin="0,2"/>
+                <Button Content="Load Workflow" Command="{Binding LoadWorkflowCommand}" Margin="0,2"/>
+                            
             </StackPanel>
         </Border>
 
         <!-- 中間：Canvas -->
         <Border Grid.Column="1" Background="#1E1E1E" CornerRadius="4" ClipToBounds="True">
             <Canvas x:Name="MainCanvas" Width="3000" Height="2000" Background="Transparent"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
                     PointerMoved="Canvas_PointerMoved" PointerReleased="Canvas_PointerReleased">
-                <ItemsControl ItemsSource="{Binding Edges}">
-                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><Canvas /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:EdgeViewModel">
-                            <Path Data="{Binding PathData}" Stroke="#007ACC" StrokeThickness="3" Fill="Transparent"/>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+
+                <!-- 連線層由 code-behind 直接同步到 Canvas -->
+                <Canvas x:Name="EdgeLayer" Width="3000" Height="2000" Background="Transparent"/>
+                
+                <!-- 暫存連線 -->
                 <Path Data="{Binding TempEdgePath}" Stroke="#FFA500" StrokeThickness="3" StrokeDashArray="4,4" Fill="Transparent"/>
-                <ItemsControl ItemsSource="{Binding Nodes}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <Canvas />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.Styles>
-                        <Style Selector="ContentPresenter" x:CompileBindings="False">
-                            <Setter Property="Canvas.Left" Value="{Binding X}"/>
-                            <Setter Property="Canvas.Top" Value="{Binding Y}"/>
-                        </Style>
-                    </ItemsControl.Styles>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:NodeViewModel">
-                            <views:NodeView />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+
+                <!-- 節點層由 code-behind 直接同步到 Canvas，避免 ItemsControl container 定位失效 -->
+                <Canvas x:Name="NodeLayer" Width="3000" Height="2000" Background="Transparent"/>
             </Canvas>
         </Border>
 
-        <!-- 右側：Inspector & Log -->
+        <!-- 右側：Inspector & Results -->
         <Border Grid.Column="2" Background="#252526" Margin="5,0,0,0">
             <Grid RowDefinitions="*,Auto,150">
-                <!-- Inspector: 顯示選中檔案的 Metadata -->
                 <Border Grid.Row="0" Margin="10,10,10,5" CornerRadius="4" Background="#1E1E1E">
                     <Grid RowDefinitions="Auto,*">
                         <TextBlock Grid.Row="0" Text="Inspector" FontWeight="Bold" Foreground="White" Margin="10"/>
-                        <TextBlock Grid.Row="0" Text="{Binding SelectedFile.FileName}" HorizontalAlignment="Right" Margin="10" Foreground="Gray" TextTrimming="CharacterEllipsis"/>
-                        
+                        <TextBlock Grid.Row="0" Text="{Binding SelectedFile.FileName}" HorizontalAlignment="Right" Margin="10" Foreground="Gray"/>
                         <ListBox Grid.Row="1" ItemsSource="{Binding SelectedFileMetadata}" Margin="10,0,10,10">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <!-- 將樣式直接套用在 Border 上 -->
-                                    <Border Background="#2D2D30" CornerRadius="4" Margin="0,2" Padding="5">
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding FieldName}" FontWeight="Bold" Foreground="#007ACC" FontSize="12"/>
-                                            <TextBlock Text="{Binding ValueText}" Foreground="White" FontSize="14" TextWrapping="Wrap"/>
-                                        </StackPanel>
-                                    </Border>
+                                    <StackPanel Margin="0,2">
+                                        <TextBlock Text="{Binding FieldName}" FontWeight="Bold" Foreground="#007ACC" FontSize="12"/>
+                                        <TextBlock Text="{Binding ValueText}" Foreground="White" FontSize="14"/>
+                                    </StackPanel>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
@@ -100,7 +83,6 @@
 
                 <Border Grid.Row="1" Height="1" Background="Gray" Margin="10,0"/>
 
-                <!-- Result List (簡化版，點擊可觸發 Inspector) -->
                 <Border Grid.Row="2" Margin="10,5,10,10" CornerRadius="4" Background="#1E1E1E">
                     <Grid RowDefinitions="Auto,*">
                         <TextBlock Grid.Row="0" Text="Results" FontWeight="Bold" Foreground="White" Margin="10"/>
@@ -108,7 +90,7 @@
                                  SelectionChanged="ResultList_SelectionChanged">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding FileName}" Foreground="White" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding FileName}" Foreground="White"/>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>

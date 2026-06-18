@@ -9,7 +9,7 @@
         x:DataType="vm:NodeCanvasViewModel"
         Icon="/Assets/avalonia-logo.ico"
         Title="ArchiveFlow Studio - Node Canvas"
-        Width="1000" Height="700">
+        Width="1280" Height="800">
 
     <Design.DataContext>
         <vm:NodeCanvasViewModel/>

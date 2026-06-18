@@ -1,9 +1,15 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Controls.Shapes;
+using Avalonia.Media;
 using ArchiveFlow.App.ViewModels;
-using ArchiveFlow.Application.Nodes.Actions;
-using Avalonia;
 using ArchiveFlow.Domain.Entities;
+using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Linq;
 
 namespace ArchiveFlow.App.Views;
 
@@ -11,54 +17,211 @@ public partial class NodeCanvasView : UserControl
 {
     private NodeViewModel? _draggedNode;
     private Point _dragOffset;
+    private NodeCanvasViewModel? _viewModel;
+    private readonly Dictionary<NodeViewModel, NodeView> _nodeViews = new();
+    private readonly Dictionary<EdgeViewModel, Path> _edgeViews = new();
 
     public NodeCanvasView()
     {
         InitializeComponent();
+        DataContextChanged += OnDataContextChanged;
     }
 
-    public NodeCanvasViewModel? ViewModel => DataContext as NodeCanvasViewModel;
+    public NodeCanvasViewModel? ViewModel => _viewModel;
 
-    private void NodeBody_PointerPressed(object sender, PointerPressedEventArgs e)
+    private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (DataContext is NodeViewModel vm && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        if (_viewModel != null)
         {
-            var canvas = this.FindAncestor<NodeCanvasView>();
-            canvas?.StartNodeDrag(vm, canvas.GetCanvasPosition(e), e.Pointer);
-            e.Handled = true;
-        }
-    }
-
-    // 新增：當點擊 TextBox 時，不觸發節點拖曳
-    private void TextBox_PointerPressed(object sender, PointerPressedEventArgs e)
-    {
-        e.Handled = true; 
-    }
-
-    private void OutputPort_PointerPressed(object sender, PointerPressedEventArgs e)
-    {
-        if (DataContext is NodeViewModel vm && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-        {
-            var canvas = this.FindAncestor<NodeCanvasView>();
-            if (canvas != null)
+            _viewModel.Nodes.CollectionChanged -= OnNodesCollectionChanged;
+            _viewModel.Edges.CollectionChanged -= OnEdgesCollectionChanged;
+            foreach (var node in _viewModel.Nodes)
             {
-                canvas.StartConnection(vm.OutputPort, canvas.GetCanvasPosition(e));
+                node.PropertyChanged -= OnNodePropertyChanged;
             }
-            e.Handled = true;
+            foreach (var edge in _viewModel.Edges)
+            {
+                edge.PropertyChanged -= OnEdgePropertyChanged;
+            }
         }
-    }
 
-    private void InputPort_PointerReleased(object sender, PointerReleasedEventArgs e)
-    {
-        if (DataContext is NodeViewModel vm)
+        _viewModel = DataContext as NodeCanvasViewModel;
+        EdgeLayer.Children.Clear();
+        NodeLayer.Children.Clear();
+        _edgeViews.Clear();
+        _nodeViews.Clear();
+
+        if (_viewModel != null)
         {
-            var canvas = this.FindAncestor<NodeCanvasView>();
-            canvas?.FinishConnection(vm.InputPort);
-            e.Handled = true;
+            _viewModel.Nodes.CollectionChanged += OnNodesCollectionChanged;
+            _viewModel.Edges.CollectionChanged += OnEdgesCollectionChanged;
+            foreach (var edge in _viewModel.Edges)
+            {
+                AddEdgeView(edge);
+            }
+            foreach (var node in _viewModel.Nodes)
+            {
+                AddNodeView(node);
+            }
         }
     }
 
-    // Called by NodeView when dragging starts
+    private void OnNodesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems != null)
+        {
+            foreach (NodeViewModel node in e.OldItems)
+            {
+                RemoveNodeView(node);
+            }
+        }
+
+        if (e.NewItems != null)
+        {
+            foreach (NodeViewModel node in e.NewItems)
+            {
+                AddNodeView(node);
+            }
+        }
+
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            foreach (var node in _nodeViews.Keys.ToList())
+            {
+                RemoveNodeView(node);
+            }
+
+            if (_viewModel != null)
+            {
+                foreach (var node in _viewModel.Nodes)
+                {
+                    AddNodeView(node);
+                }
+            }
+        }
+    }
+
+    private void OnEdgesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems != null)
+        {
+            foreach (EdgeViewModel edge in e.OldItems)
+            {
+                RemoveEdgeView(edge);
+            }
+        }
+
+        if (e.NewItems != null)
+        {
+            foreach (EdgeViewModel edge in e.NewItems)
+            {
+                AddEdgeView(edge);
+            }
+        }
+
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            foreach (var edge in _edgeViews.Keys.ToList())
+            {
+                RemoveEdgeView(edge);
+            }
+
+            if (_viewModel != null)
+            {
+                foreach (var edge in _viewModel.Edges)
+                {
+                    AddEdgeView(edge);
+                }
+            }
+        }
+    }
+
+    private void AddEdgeView(EdgeViewModel edge)
+    {
+        if (_edgeViews.ContainsKey(edge)) return;
+
+        var path = new Path
+        {
+            Stroke = Brushes.DodgerBlue,
+            StrokeThickness = 3,
+            Fill = Brushes.Transparent,
+            IsHitTestVisible = false
+        };
+
+        _edgeViews[edge] = path;
+        EdgeLayer.Children.Add(path);
+        UpdateEdgeView(edge);
+        edge.PropertyChanged += OnEdgePropertyChanged;
+    }
+
+    private void RemoveEdgeView(EdgeViewModel edge)
+    {
+        edge.PropertyChanged -= OnEdgePropertyChanged;
+
+        if (_edgeViews.Remove(edge, out var path))
+        {
+            EdgeLayer.Children.Remove(path);
+        }
+    }
+
+    private void OnEdgePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is EdgeViewModel edge && e.PropertyName == nameof(EdgeViewModel.PathData))
+        {
+            UpdateEdgeView(edge);
+        }
+    }
+
+    private void UpdateEdgeView(EdgeViewModel edge)
+    {
+        if (_edgeViews.TryGetValue(edge, out var path))
+        {
+            path.Data = string.IsNullOrWhiteSpace(edge.PathData) ? null : Geometry.Parse(edge.PathData);
+        }
+    }
+
+    private void AddNodeView(NodeViewModel node)
+    {
+        if (_nodeViews.ContainsKey(node)) return;
+
+        var nodeView = new NodeView
+        {
+            DataContext = node
+        };
+
+        _nodeViews[node] = nodeView;
+        NodeLayer.Children.Add(nodeView);
+        UpdateNodeViewPosition(node);
+        node.PropertyChanged += OnNodePropertyChanged;
+    }
+
+    private void RemoveNodeView(NodeViewModel node)
+    {
+        node.PropertyChanged -= OnNodePropertyChanged;
+
+        if (_nodeViews.Remove(node, out var nodeView))
+        {
+            NodeLayer.Children.Remove(nodeView);
+        }
+    }
+
+    private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (sender is NodeViewModel node && (e.PropertyName == nameof(NodeViewModel.X) || e.PropertyName == nameof(NodeViewModel.Y)))
+        {
+            UpdateNodeViewPosition(node);
+        }
+    }
+
+    private void UpdateNodeViewPosition(NodeViewModel node)
+    {
+        if (_nodeViews.TryGetValue(node, out var nodeView))
+        {
+            Canvas.SetLeft(nodeView, node.X);
+            Canvas.SetTop(nodeView, node.Y);
+        }
+    }
+
     public Point GetCanvasPosition(PointerEventArgs e)
     {
         return e.GetPosition(MainCanvas);
@@ -67,9 +230,20 @@ public partial class NodeCanvasView : UserControl
     public void StartNodeDrag(NodeViewModel node, Point canvasPosition, IPointer pointer)
     {
         _draggedNode = node;
-        // Calculate offset so the node doesn't jump to the cursor center
         _dragOffset = new Point(canvasPosition.X - node.X, canvasPosition.Y - node.Y);
         pointer.Capture(MainCanvas);
+    }
+
+    public void StartConnection(PortViewModel port, Point canvasPosition, IPointer pointer)
+    {
+        ViewModel?.StartConnection(port);
+        ViewModel?.UpdateTempConnection(canvasPosition.X, canvasPosition.Y);
+        pointer.Capture(MainCanvas);
+    }
+
+    public void FinishConnection(PortViewModel port)
+    {
+        ViewModel?.FinishConnection(port);
     }
 
     private void Canvas_PointerMoved(object sender, PointerEventArgs e)
@@ -78,12 +252,11 @@ public partial class NodeCanvasView : UserControl
 
         if (_draggedNode != null)
         {
-            // Update node position directly via ViewModel
             ViewModel?.UpdateNodePosition(_draggedNode, pos.X - _dragOffset.X, pos.Y - _dragOffset.Y);
+            UpdateNodeViewPosition(_draggedNode);
         }
         else if (ViewModel?.IsConnecting == true)
         {
-            // Update temporary connection line
             ViewModel.UpdateTempConnection(pos.X, pos.Y);
         }
     }
@@ -94,28 +267,19 @@ public partial class NodeCanvasView : UserControl
         {
             _draggedNode = null;
             e.Pointer.Capture(null);
+            return;
         }
-        else if (ViewModel?.IsConnecting == true)
+
+        if (ViewModel?.IsConnecting == true)
         {
             var pos = e.GetPosition(MainCanvas);
             if (!ViewModel.TryFinishConnectionAt(pos.X, pos.Y))
             {
                 ViewModel.CancelConnection();
             }
+
+            e.Pointer.Capture(null);
         }
-    }
-
-    // Called by NodeView when starting connection from Output Port
-    public void StartConnection(PortViewModel port, Point canvasPosition)
-    {
-        ViewModel?.StartConnection(port);
-        ViewModel?.UpdateTempConnection(canvasPosition.X, canvasPosition.Y);
-    }
-
-    // Called by NodeView when releasing on Input Port
-    public void FinishConnection(PortViewModel port)
-    {
-        ViewModel?.FinishConnection(port);
     }
 
     private void ResultList_SelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -5,7 +5,7 @@ namespace ArchiveFlow.App.ViewModels;
 
 public partial class NodeViewModel : ObservableObject
 {
-    public Guid Id { get; } = Guid.NewGuid();
+    public Guid Id { get; private set; } = Guid.NewGuid();
 
     [ObservableProperty]
     private string _title = string.Empty;
@@ -26,16 +26,29 @@ public partial class NodeViewModel : ObservableObject
     [ObservableProperty] 
     private string _parameterValue = string.Empty;
 
-    public PortViewModel InputPort { get; }
-    public PortViewModel OutputPort { get; }
+    public PortViewModel InputPort { get; set;}
+    public PortViewModel OutputPort { get; set;}
 
+    // 預設建構子
     public NodeViewModel(string title, string nodeType, double x, double y, string defaultParam = "")
+    {
+        Id = Guid.NewGuid();
+        Initialize(title, nodeType, x, y, defaultParam);
+    }
+
+    // 新增：用於 Load Workflow 的建構子
+    public NodeViewModel(Guid id, string title, string nodeType, double x, double y, string defaultParam = "")
+    {
+        Id = id;
+        Initialize(title, nodeType, x, y, defaultParam);
+    }
+
+    private void Initialize(string title, string nodeType, double x, double y, string defaultParam)
     {
         Title = title;
         NodeType = nodeType;
         X = x; Y = y;
         ParameterValue = defaultParam;
-        
         InputPort = new PortViewModel(this, true, 0, 50);
         OutputPort = new PortViewModel(this, false, 200, 50);
     }
