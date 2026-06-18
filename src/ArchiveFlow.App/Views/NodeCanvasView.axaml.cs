@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
+using Avalonia.Threading;
 
 namespace ArchiveFlow.App.Views;
 
@@ -20,6 +21,9 @@ public partial class NodeCanvasView : UserControl
     private NodeCanvasViewModel? _viewModel;
     private readonly Dictionary<NodeViewModel, NodeView> _nodeViews = new();
     private readonly Dictionary<EdgeViewModel, Path> _edgeViews = new();
+    // Performance optimization: Viewport tracking
+    private Rect _currentViewport;
+    private bool _isUpdatingNodes;
 
     public NodeCanvasView()
     {
@@ -69,12 +73,63 @@ public partial class NodeCanvasView : UserControl
 
     private void CanvasViewport_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        UpdateCanvasViewportCenter();
+        if (sender is ScrollViewer sv)
+        {
+            _currentViewport = new Rect(new Point(sv.Offset.X, sv.Offset.Y), sv.Viewport);
+            UpdateVisibleNodes();
+        }
     }
 
     private void CanvasViewport_ScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        UpdateCanvasViewportCenter();
+        if (sender is ScrollViewer sv)
+        {
+            _currentViewport = new Rect(new Point(sv.Offset.X, sv.Offset.Y), sv.Viewport);
+            
+            // Throttle updates for performance
+            if (!_isUpdatingNodes)
+            {
+                _isUpdatingNodes = true;
+                Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                {
+                    UpdateVisibleNodes();
+                    _isUpdatingNodes = false;
+                }, DispatcherPriority.Background);
+            }
+        }
+    }
+    /// <summary>
+    /// Optimized node rendering - only render visible nodes
+    /// </summary>
+    private void UpdateVisibleNodes()
+    {
+        if (_viewModel == null || MainCanvas == null) return;
+
+        // Expand viewport slightly for smoother scrolling
+        var expandedViewport = _currentViewport.Inflate(200);
+
+        foreach (var nodeVm in _viewModel.Nodes)
+        {
+            var nodeView = FindNodeView(nodeVm);
+            if (nodeView != null)
+            {
+                var nodeBounds = new Rect(nodeVm.X, nodeVm.Y, 200, 100);
+                nodeView.IsVisible = expandedViewport.Intersects(nodeBounds);
+            }
+        }
+    }
+
+    private NodeView? FindNodeView(NodeViewModel node)
+    {
+        return _nodeViews.TryGetValue(node, out var nodeView) ? nodeView : null;
+    }
+    private void Canvas_PointerPressed(object sender, PointerPressedEventArgs e)
+    {
+        // Deselect when clicking on empty canvas
+        if (sender is Canvas && e.Source is Canvas)
+        {
+            _viewModel?.SelectNode(null);
+        }
     }
 
     private void UpdateCanvasViewportCenter()
@@ -342,4 +397,27 @@ public partial class NodeCanvasView : UserControl
         UpdateCanvasViewportCenter();
         this.Focus();
     }
+
+    // 新增方法：處理 TreeView 節點點擊
+    private void NodeLibraryItem_PointerPressed(object sender, PointerPressedEventArgs e)
+    {
+        if (sender is Border border && border.Tag is string nodeType && !string.IsNullOrEmpty(nodeType))
+        {
+            var command = nodeType switch
+            {
+                "AllFiles" => _viewModel?.AddAllFilesCommand,
+                "FilterTxt" => _viewModel?.AddFilterTxtCommand,
+                "FilterMd" => _viewModel?.AddFilterMdCommand,
+                "AddTagAI" => _viewModel?.AddTagAICommand,
+                "Result" => _viewModel?.AddResultTableCommand,
+                _ => null
+            };
+            
+            if (command?.CanExecute(null) == true)
+            {
+                command.Execute(null);
+            }
+        }
+    }
+
 }

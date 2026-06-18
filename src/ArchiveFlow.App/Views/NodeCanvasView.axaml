@@ -3,59 +3,88 @@
              xmlns:vm="using:ArchiveFlow.App.ViewModels"
              xmlns:domain="using:ArchiveFlow.Domain.Entities"
              xmlns:app="using:ArchiveFlow.Application.Interfaces"
-             xmlns:conv="using:ArchiveFlow.App.Converters"
+             xmlns:converters="using:ArchiveFlow.App.Converters"
              x:Class="ArchiveFlow.App.Views.NodeCanvasView"
              x:DataType="vm:NodeCanvasViewModel"
              Focusable="True"
              KeyDown="UserControl_KeyDown">
 
     <DockPanel>
+        <!-- Bottom: Batch Job Status Bar -->
         <Border DockPanel.Dock="Bottom" Background="#2D2D30" Padding="15,10" CornerRadius="4" Margin="10,0,10,10">
             <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                 <TextBlock Grid.Column="0" Text="Batch Job:" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="0,0,15,0"/>
-
+                
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="{Binding CurrentBatchJob.JobName}" Foreground="White" FontSize="14"/>
                     <TextBlock Text="{Binding CurrentBatchJob.StatusMessage}" Foreground="Gray" FontSize="12"/>
                 </StackPanel>
 
-                <ProgressBar Grid.Column="2" Width="150" Height="10"
-                             IsIndeterminate="{Binding CurrentBatchJob.IsActive}"
+                <ProgressBar Grid.Column="2" Width="150" Height="10" 
+                             IsIndeterminate="{Binding CurrentBatchJob.IsActive}" 
                              Margin="15,0" VerticalAlignment="Center"/>
 
-                <Button Grid.Column="3" Content="Run Mock Job"
-                        Command="{Binding RunMockBatchJobCommand}"
+                <Button Grid.Column="3" Content="Run Mock Job" 
+                        Command="{Binding RunMockBatchJobCommand}" 
                         Classes="accent" Padding="10,5" VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
-        <Grid ColumnDefinitions="220,*,300" DockPanel.Dock="Top">
+        <!-- Main Content Grid -->
+        <Grid ColumnDefinitions="250,*,350" DockPanel.Dock="Top">
+            
             <!-- Left: Hierarchical Node Library -->
             <Border Grid.Column="0" Background="#252526" Margin="0,0,5,0">
                 <Grid RowDefinitions="Auto,*">
-                    <TextBlock Text="Node Library" FontWeight="Bold" Foreground="White" Margin="10,10,10,5"/>
+                    <TextBlock Text="Node Library" FontWeight="Bold" Foreground="White" Margin="15,15,15,10"/>
                     
-                    <TreeView Grid.Row="1" ItemsSource="{Binding NodeLibraryTree}" Margin="10,0,10,10">
+                    <!-- TreeView with proper binding -->
+                    <TreeView Grid.Row="1" 
+                              ItemsSource="{Binding NodeLibraryTree}" 
+                              Margin="10,0,10,15"
+                              SelectionMode="Single">
                         <TreeView.ItemTemplate>
                             <TreeDataTemplate ItemsSource="{Binding Children}">
-                                <StackPanel Orientation="Horizontal" Spacing="5">
-                                    <!-- If it's a leaf node (has NodeType), make it a button-like item -->
-                                    <TextBlock Text="{Binding Name}" Foreground="White" Margin="5,2"/>
-                                </StackPanel>
+                                <Border Padding="5,3" 
+                                        CornerRadius="4"
+                                        Background="Transparent"
+                                        PointerPressed="NodeLibraryItem_PointerPressed"
+                                        Tag="{Binding NodeType}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <!-- Icon based on category -->
+                                        <Path Data="{Binding IsCategory, Converter={x:Static converters:NodeTypeToIconConverter.Instance}}" 
+                                              Fill="#007ACC" 
+                                              Width="12" Height="12" 
+                                              VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Name}" 
+                                                   Foreground="White" 
+                                                   VerticalAlignment="Center"
+                                                   FontSize="13"/>
+                                    </StackPanel>
+                                </Border>
                             </TreeDataTemplate>
                         </TreeView.ItemTemplate>
                     </TreeView>
                 </Grid>
             </Border>
 
-            <Border Grid.Column="1" Background="#1E1E1E" CornerRadius="4" ClipToBounds="True">
+            <!-- Center: Canvas with Performance Optimization -->
+            <Border Grid.Column="1" Background="#1E1E1E" CornerRadius="4" ClipToBounds="True" Margin="5,0">
+                <!-- Optimized ScrollViewer with Virtualization -->
                 <ScrollViewer x:Name="CanvasViewport"
                               HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Auto"
                               SizeChanged="CanvasViewport_SizeChanged"
                               ScrollChanged="CanvasViewport_ScrollChanged">
-                    <Canvas x:Name="MainCanvas" Width="3000" Height="2000" Background="Transparent"
-                            PointerMoved="Canvas_PointerMoved" PointerReleased="Canvas_PointerReleased">
+                    
+                    <Canvas x:Name="MainCanvas" 
+                            Width="5000" Height="5000" 
+                            Background="Transparent"
+                            PointerMoved="Canvas_PointerMoved" 
+                            PointerReleased="Canvas_PointerReleased"
+                            PointerPressed="Canvas_PointerPressed">
+                        
+                        <!-- Context Menu -->
                         <Canvas.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Add Node">
@@ -69,7 +98,6 @@
                                     </MenuItem>
                                     <MenuItem Header="Actions">
                                         <MenuItem Header="Add Tag: AI" Command="{Binding AddTagAICommand}"/>
-                                        <MenuItem Header="Set Subject: CS" Command="{Binding AddSubjectCSCommand}"/>
                                         <MenuItem Header="Auto-Tag Files" Command="{Binding AddAutoTagCommand}"/>
                                     </MenuItem>
                                     <MenuItem Header="DAG Logic">
@@ -82,50 +110,245 @@
                                 </MenuItem>
                                 <Separator/>
                                 <MenuItem Header="Delete Selected" Command="{Binding DeleteSelectedNodeCommand}" InputGesture="Delete"/>
+                                <MenuItem Header="Clear Canvas" Command="{Binding ClearCanvasCommand}"/>
                             </ContextMenu>
                         </Canvas.ContextMenu>
 
-                        <Canvas x:Name="EdgeLayer" Width="3000" Height="2000" Background="Transparent"/>
-                        <Path Data="{Binding TempEdgePath}" Stroke="#FFA500" StrokeThickness="3" StrokeDashArray="4,4" Fill="Transparent"/>
-                        <Canvas x:Name="NodeLayer" Width="3000" Height="2000" Background="Transparent"/>
+                        <!-- Edge Layer (synchronized by code-behind for stable canvas geometry) -->
+                        <Canvas x:Name="EdgeLayer" Width="5000" Height="5000"/>
+                        
+                        <!-- Temporary Connection Line -->
+                        <Path Data="{Binding TempEdgePath}" 
+                              Stroke="#FFA500" 
+                              StrokeThickness="2.5" 
+                              StrokeDashArray="5,3" 
+                              Fill="Transparent"
+                              Opacity="0.9"/>
+
+                        <!-- Node Layer (Dynamically populated by code-behind) -->
+                        <Canvas x:Name="NodeLayer" Width="5000" Height="5000"/>
+                        
                     </Canvas>
                 </ScrollViewer>
             </Border>
 
-            <!-- Right Panel Structure Update -->
+            <!-- Right Panel: Node Settings + Inspector -->
             <Border Grid.Column="2" Background="#252526" Margin="5,0,0,0">
                 <ScrollViewer>
-                    <StackPanel Margin="10">
-                        <!-- Node Settings (Visible when a node is selected) -->
+                    <StackPanel Margin="15">
+                        
+                        <!-- Node Settings Panel -->
                         <Border IsVisible="{Binding SelectedNode, Converter={x:Static ObjectConverters.IsNotNull}}" 
-                                Background="#1E1E1E" CornerRadius="4" Margin="0,0,0,10">
-                            <StackPanel Margin="10">
-                                <TextBlock Text="Node Settings" FontWeight="Bold" Foreground="White" Margin="0,0,0,10"/>
-                                <TextBlock Text="{Binding SelectedNode.Title}" Foreground="#007ACC" Margin="0,0,0,10"/>
+                                Background="#1E1E1E" CornerRadius="6" Margin="0,0,0,15" 
+                                BoxShadow="0 2 4 rgba(0,0,0,0.3)">
+                            <StackPanel Margin="15">
+                                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+                                    <Path Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" 
+                                          Fill="#007ACC" Width="16" Height="16" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Node Settings" FontWeight="Bold" Foreground="White" FontSize="14"/>
+                                </StackPanel>
                                 
+                                <TextBlock Text="{Binding SelectedNode.Title}" 
+                                           Foreground="#007ACC" 
+                                           Margin="0,0,0,15"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"/>
+                                
+                                <!-- Parameters List -->
                                 <ItemsControl ItemsSource="{Binding SelectedNode.Parameters}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:NodeParameterViewModel">
-                                            <StackPanel Margin="0,5">
-                                                <TextBlock Text="{Binding Label}" Foreground="Gray" FontSize="12"/>
+                                            <StackPanel Margin="0,0,0,12">
+                                                <TextBlock Text="{Binding Label}" 
+                                                           Foreground="#888" 
+                                                           FontSize="11"
+                                                           Margin="0,0,0,5"/>
                                                 
-                                                <!-- Render different controls based on Type -->
-                                                <TextBox Text="{Binding Value}" IsVisible="{Binding Type, Converter={x:Static conv:IsEqualConverter.Instance}, ConverterParameter=Text}" Margin="0,2"/>
+                                                <!-- Text Parameter -->
+                                                <TextBox Text="{Binding Value}" 
+                                                         IsVisible="{Binding Type, Converter={x:Static converters:IsEqualConverter.Instance}, ConverterParameter=Text}" 
+                                                         Margin="0,2" 
+                                                         Background="#2D2D30" 
+                                                         Foreground="White"
+                                                         CornerRadius="4"
+                                                         Padding="8,6"/>
                                                 
-                                                <NumericUpDown Value="{Binding Value}" IsVisible="{Binding Type, Converter={x:Static conv:IsEqualConverter.Instance}, ConverterParameter=Number}" Margin="0,2"/>
+                                                <!-- Number Parameter -->
+                                                <NumericUpDown Value="{Binding Value}" 
+                                                               IsVisible="{Binding Type, Converter={x:Static converters:IsEqualConverter.Instance}, ConverterParameter=Number}" 
+                                                               Margin="0,2"
+                                                               Background="#2D2D30"
+                                                               Foreground="White"
+                                                               CornerRadius="4"/>
                                                 
-                                                <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Value}" IsVisible="{Binding Type, Converter={x:Static conv:IsEqualConverter.Instance}, ConverterParameter=Dropdown}" Margin="0,2"/>
+                                                <!-- Dropdown Parameter -->
+                                                <ComboBox ItemsSource="{Binding Options}" 
+                                                          SelectedItem="{Binding Value}" 
+                                                          IsVisible="{Binding Type, Converter={x:Static converters:IsEqualConverter.Instance}, ConverterParameter=Dropdown}" 
+                                                          Margin="0,2"
+                                                          Background="#2D2D30"
+                                                          Foreground="White"
+                                                          CornerRadius="4"
+                                                          Padding="8,6"/>
                                             </StackPanel>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+
+                                <!-- Node Actions -->
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,10,0,0">
+                                    <Button Content="Duplicate" 
+                                            Command="{Binding $parent[UserControl].DataContext.DuplicateNodeCommand}"
+                                            CommandParameter="{Binding SelectedNode}"
+                                            Classes="accent"
+                                            Padding="10,5"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"/>
+                                    <Button Content="Delete" 
+                                            Command="{Binding $parent[UserControl].DataContext.DeleteSelectedNodeCommand}"
+                                            Padding="10,5"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            Foreground="#FF6B6B"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
-                        <!-- File Inspector (Existing) -->
-                        <Border Background="#1E1E1E" CornerRadius="4" Margin="0,0,0,10">
-                            <!-- ... 原本的 File Inspector 內容 ... -->
+                        <!-- File Inspector Panel -->
+                        <Border Background="#1E1E1E" CornerRadius="6" Margin="0,0,0,15">
+                            <StackPanel Margin="15">
+                                <TextBlock Text="File Inspector" 
+                                           FontWeight="Bold" 
+                                           Foreground="White" 
+                                           FontSize="14"
+                                           Margin="0,0,0,10"/>
+                                
+                                <!-- Preview Area -->
+                                <Border Grid.Row="1" 
+                                        Margin="0,0,0,10" 
+                                        CornerRadius="4" 
+                                        Background="#121212" 
+                                        MaxHeight="200"
+                                        MinHeight="100"
+                                        IsVisible="{Binding SelectedFile, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                    <Grid>
+                                        <!-- Image Preview -->
+                                        <Image Source="{Binding SelectedFileThumbnail}" 
+                                               Stretch="Uniform" 
+                                               Margin="10"
+                                               IsVisible="{Binding SelectedFileThumbnail, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                                        
+                                        <!-- Text Preview -->
+                                        <ScrollViewer IsVisible="{Binding SelectedFilePreviewText, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                            <TextBlock Text="{Binding SelectedFilePreviewText}" 
+                                                       Foreground="#CCC" 
+                                                       FontSize="12" 
+                                                       FontFamily="Consolas, monospace"
+                                                       TextWrapping="Wrap" 
+                                                       Margin="10"/>
+                                        </ScrollViewer>
+
+                                        <!-- Placeholder -->
+                                        <TextBlock Text="No preview available" 
+                                                   Foreground="#555" 
+                                                   HorizontalAlignment="Center" 
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{Binding SelectedFile, Converter={x:Static converters:NullToBoolConverter.Instance}}"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Metadata List -->
+                                <TextBlock Text="Metadata" 
+                                           FontWeight="SemiBold" 
+                                           Foreground="#888" 
+                                           FontSize="12"
+                                           Margin="0,0,0,8"/>
+                                
+                                <ListBox ItemsSource="{Binding SelectedFileMetadata}" 
+                                         Margin="0,0,0,10"
+                                         MaxHeight="200"
+                                         Background="Transparent"
+                                         BorderThickness="0">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#2D2D30" 
+                                                    CornerRadius="4" 
+                                                    Margin="0,0,0,5"
+                                                    Padding="10,8">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding FieldName}" 
+                                                               FontWeight="Bold" 
+                                                               Foreground="#007ACC" 
+                                                               FontSize="11"/>
+                                                    <TextBlock Text="{Binding ValueText}" 
+                                                               Foreground="White" 
+                                                               FontSize="13"
+                                                               TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
                         </Border>
+
+                        <!-- Results Panel -->
+                        <Border Background="#1E1E1E" CornerRadius="6">
+                            <Grid RowDefinitions="Auto,*" Margin="15">
+                                <TextBlock Grid.Row="0" 
+                                           Text="Results" 
+                                           FontWeight="Bold" 
+                                           Foreground="White" 
+                                           FontSize="14"
+                                           Margin="0,0,0,10"/>
+                                
+                                <!-- Virtualized Results List -->
+                                <ListBox Grid.Row="1" 
+                                         ItemsSource="{Binding ResultFiles}" 
+                                         Margin="0,0,0,10"
+                                         MaxHeight="250"
+                                         SelectionChanged="ResultList_SelectionChanged"
+                                         Background="Transparent"
+                                         BorderThickness="0">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="domain:FileRecord">
+                                            <Border Background="#2D2D30" 
+                                                    CornerRadius="4" 
+                                                    Margin="0,0,0,5"
+                                                    Padding="10,8">
+                                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                                    <!-- File Icon -->
+                                                    <Path Grid.Column="0" 
+                                                          Data="{Binding FileExtension, Converter={x:Static converters:ExtensionToIconConverter.Instance}}" 
+                                                          Fill="#007ACC" 
+                                                          Width="20" Height="20" 
+                                                          VerticalAlignment="Center"
+                                                          Margin="0,0,10,0"/>
+                                                    
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding FileName}" 
+                                                                   Foreground="White"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   FontSize="13"/>
+                                                        <TextBlock Text="{Binding FileSize, Converter={x:Static converters:FileSizeConverter.Instance}}" 
+                                                                   Foreground="#888"
+                                                                   FontSize="11"/>
+                                                    </StackPanel>
+                                                    
+                                                    <TextBlock Grid.Column="2" 
+                                                               Text="{Binding Status}" 
+                                                               Foreground="#00FF00"
+                                                               FontSize="11"
+                                                               VerticalAlignment="Center"
+                                                               Margin="10,0,0,0"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
+                        </Border>
+
                     </StackPanel>
                 </ScrollViewer>
             </Border>

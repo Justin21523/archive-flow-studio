@@ -31,7 +31,7 @@ public partial class DatabaseManagerViewModel : ObservableObject
         _searchService = searchService;
         _logger = logger;
         
-        RefreshStatsCommand.Execute(null);
+        Task.Run(async () => await RefreshStatsAsync());
     }
 
     [RelayCommand]
@@ -39,14 +39,18 @@ public partial class DatabaseManagerViewModel : ObservableObject
     {
         try
         {
+            StatusMessage = "Loading statistics...";
             var files = await _fileRepository.GetAllAsync();
-            TotalFiles = files.Count();
-            long sizeBytes = files.Sum(f => f.FileSize);
-            TotalSize = sizeBytes > 1_000_000 ? $"{sizeBytes / 1_000_000} MB" : $"{sizeBytes / 1_000} KB";
             
-            // Mock metadata count (in real app, query DB)
-            TotalMetadata = TotalFiles * 2; 
-            StatusMessage = "Statistics refreshed.";
+            // 切換回 UI 執行緒更新屬性
+            await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                TotalFiles = files.Count();
+                long sizeBytes = files.Sum(f => f.FileSize);
+                TotalSize = sizeBytes > 1_000_000 ? $"{sizeBytes / 1_000_000} MB" : $"{sizeBytes / 1_000} KB";
+                TotalMetadata = TotalFiles * 2; // Mock
+                StatusMessage = "Statistics refreshed.";
+            });
         }
         catch (Exception ex)
         {

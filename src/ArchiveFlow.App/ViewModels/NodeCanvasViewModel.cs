@@ -76,7 +76,7 @@ public partial class NodeCanvasViewModel : ObservableObject
         _logger = logger;
         
         InitializeDefaultNodes();
-        LoadPluginNodes();
+        InitializeNodeLibraryTree(); 
         SubscribeToBatchJobEvents();
     }
 
@@ -97,7 +97,51 @@ public partial class NodeCanvasViewModel : ObservableObject
         if (definition == null) return;
         AddNodeInternal(definition.DisplayName, definition.NodeType);
     }
-
+    
+    // Add these commands for performance optimization
+    [RelayCommand]
+    private void ClearCanvas()
+    {
+        Nodes.Clear();
+        Edges.Clear();
+        SelectedNode = null;
+    }
+    
+    [RelayCommand]
+    private void DuplicateNode(NodeViewModel? node)
+    {
+        if (node == null) return;
+        
+        var newNode = new NodeViewModel(
+            $"{node.Title} (Copy)",
+            node.NodeType,
+            node.X + 30,
+            node.Y + 30,
+            node.ParameterValue);
+        
+        // Copy parameters
+        foreach (var param in node.Parameters)
+        {
+            newNode.Parameters.Add(new NodeParameterViewModel(
+                param.Label, param.Type, param.Value));
+        }
+        
+        Nodes.Add(newNode);
+        SelectNode(newNode);
+    }
+    // Performance optimization: Lazy loading for large datasets
+    private bool _isVirtualized = true;
+    
+    public bool IsVirtualized
+    {
+        get => _isVirtualized;
+        set
+        {
+            _isVirtualized = value;
+            // Trigger UI refresh
+        }
+    }
+    
     // 4. 新增訂閱背景任務事件的方法
     private void SubscribeToBatchJobEvents()
     {
@@ -251,6 +295,8 @@ public partial class NodeCanvasViewModel : ObservableObject
         var x = Math.Max(0, CanvasViewportCenterX - NodeDefaultWidth / 2);
         var y = Math.Max(0, CanvasViewportCenterY - NodeDefaultHeight / 2);
         var newNode = new NodeViewModel(title, type, x, y, defaultParam);
+
+        newNode.AddTextParam("General Parameter", defaultParam);
 
         // Initialize specific parameters based on node type
         switch (type)
