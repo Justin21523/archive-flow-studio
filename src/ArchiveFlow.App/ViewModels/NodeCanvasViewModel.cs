@@ -10,6 +10,7 @@ using ArchiveFlow.Application.Nodes;
 using ArchiveFlow.Application.Nodes.Query;
 using ArchiveFlow.Application.Nodes.Actions;
 using ArchiveFlow.Domain.Entities;
+using ArchiveFlow.Application.DTOs;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -27,6 +28,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     private readonly IWorkflowStorageService _workflowStorage; 
     private readonly IFilePreviewService _previewService;
     private readonly IAutoTaggingService _autoTaggingService;
+    private readonly IBatchJobService _batchJobService;
 
     public ObservableCollection<NodeViewModel> Nodes { get; } = new();
     public ObservableCollection<EdgeViewModel> Edges { get; } = new();
@@ -42,6 +44,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     [ObservableProperty] private NodeViewModel? _selectedNode;
     [ObservableProperty] private double _canvasViewportCenterX = 1500;
     [ObservableProperty] private double _canvasViewportCenterY = 1000;
+    [ObservableProperty] private BatchJobInfo _currentBatchJob = new() { JobName = "Idle", StatusMessage = "No active jobs." };
 
     private const double NodeDefaultWidth = 200;
     private const double NodeDefaultHeight = 130;
@@ -51,21 +54,82 @@ public partial class NodeCanvasViewModel : ObservableObject
         IFileRepository fileRepository, 
         IMetadataRepository metadataRepository,
         ISearchService searchService,
-        IWorkflowStorageService workflowStorage, 
+        IWorkflowStorageService workflowStorage,
         IFilePreviewService previewService,
         IAutoTaggingService autoTaggingService,
+        IBatchJobService batchJobService,
         ILogger<NodeCanvasViewModel> logger)
     {
         _fileRepository = fileRepository;
         _metadataRepository = metadataRepository;
         _searchService = searchService;
+        _workflowStorage = workflowStorage;
         _previewService = previewService;
         _autoTaggingService = autoTaggingService;
+        _batchJobService = batchJobService;
         _logger = logger;
         
-        _logger.LogInformation("NodeCanvasViewModel constructor called");
-        _workflowStorage = workflowStorage;
         InitializeDefaultNodes();
+        SubscribeToBatchJobEvents();
+    }
+
+    // 4. 新增訂閱背景任務事件的方法
+    private void SubscribeToBatchJobEvents()
+    {
+        _batchJobService.OnJobStarted += (name) => 
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => 
+            {
+                CurrentBatchJob = new BatchJobInfo 
+                { 
+                    JobName = name, 
+                    StatusMessage = "Starting...", 
+                    IsActive = true 
+                };
+            });
+        };
+
+        _batchJobService.OnJobProgress += (name, msg) => 
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => 
+            {
+                CurrentBatchJob = new BatchJobInfo
+                {
+                    JobName = name,
+                    StatusMessage = msg,
+                    IsActive = true
+                };
+            });
+        };
+
+        _batchJobService.OnJobCompleted += (name) => 
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => 
+            {
+                CurrentBatchJob = new BatchJobInfo
+                {
+                    JobName = name,
+                    StatusMessage = "Completed.",
+                    IsActive = false
+                };
+            });
+        };
+    }
+    
+    // 5. 新增一個測試用的 Command 來模擬背景任務
+    [RelayCommand]
+    private void RunMockBatchJob()
+    {
+        _batchJobService.EnqueueJob("Simulated Thumbnail Generation", async (ct, progress) =>
+        {
+            for (int i = 1; i <= 10; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                await Task.Delay(500, ct); // 模擬耗時操作
+                progress.Report($"Processing file {i}/10...");
+            }
+            progress.Report("Completed!");
+        });
     }
 
     private void InitializeDefaultNodes()

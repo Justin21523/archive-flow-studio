@@ -71,6 +71,8 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IFilePreviewService, ArchiveFlow.Infrastructure.Preview.FilePreviewService>();
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IMockDataService, ArchiveFlow.Infrastructure.Services.MockDataService>();
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IAutoTaggingService, ArchiveFlow.Infrastructure.Services.LocalKeywordTaggingService>();
+        // Register the background batch job service as a singleton
+        services.AddSingleton<ArchiveFlow.Application.Interfaces.IBatchJobService, ArchiveFlow.Infrastructure.Services.BackgroundBatchJobService>();
 
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb
