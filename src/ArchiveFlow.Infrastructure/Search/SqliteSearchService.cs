@@ -29,13 +29,22 @@ public class SqliteSearchService : ISearchService
     public async Task IndexFileAsync(FileRecord file, string additionalContent = "")
     {
         using var connection = CreateConnection();
-        // 組合搜尋內容：檔名 + 路徑 + 額外內容
-        string content = $"{file.FileName} {file.FilePath} {additionalContent}";
-        
-        // 先刪除舊的索引，再插入新的
+        var contentPreview = string.IsNullOrWhiteSpace(additionalContent)
+            ? file.ContentPreview
+            : $"{file.ContentPreview} {additionalContent}".Trim();
+
+        // Keep the FTS row in sync with the metadata-column schema.
         await connection.ExecuteAsync("DELETE FROM files_fts WHERE file_id = @FileId", new { FileId = file.Id });
-        await connection.ExecuteAsync("INSERT INTO files_fts (file_id, content) VALUES (@FileId, @Content)", 
-            new { FileId = file.Id, Content = content });
+        await connection.ExecuteAsync(@"
+            INSERT INTO files_fts (file_id, file_name, file_path, content_preview)
+            VALUES (@FileId, @FileName, @FilePath, @ContentPreview)",
+            new
+            {
+                FileId = file.Id,
+                file.FileName,
+                file.FilePath,
+                ContentPreview = contentPreview
+            });
     }
 
     public async Task<IEnumerable<FileRecord>> SearchAsync(string keyword)

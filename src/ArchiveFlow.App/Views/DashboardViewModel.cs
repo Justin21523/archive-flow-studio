@@ -8,15 +8,12 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 
-namespace ArchiveFlow.App.ViewModels;
+namespace ArchiveFlow.App.Views.Legacy;
 
-/// <summary>
-/// ViewModel for the Dashboard (Lobby) view.
-/// </summary>
-public partial class DashboardViewModel : ObservableObject
+public partial class LegacyDashboardViewModel : ObservableObject
 {
     private readonly IStatisticsService _statisticsService;
-    private readonly ILogger<DashboardViewModel> _logger;
+    private readonly ILogger<LegacyDashboardViewModel> _logger;
 
     [ObservableProperty] private int _totalFiles;
     [ObservableProperty] private string _totalSize = "0 MB";
@@ -25,12 +22,11 @@ public partial class DashboardViewModel : ObservableObject
     
     public ObservableCollection<FileTypeStat> FileTypeBars { get; } = new();
 
-    public DashboardViewModel(IStatisticsService statisticsService, ILogger<DashboardViewModel> logger)
+    public LegacyDashboardViewModel(IStatisticsService statisticsService, ILogger<LegacyDashboardViewModel> logger)
     {
         _statisticsService = statisticsService;
         _logger = logger;
         
-        // Load statistics on startup
         Task.Run(async () => await LoadStatisticsAsync());
     }
 

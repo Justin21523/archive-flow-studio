@@ -72,6 +72,20 @@ public class SqliteStatisticsService : IStatisticsService
         return stats;
     }
 
+    public async Task<DashboardStatisticsDto> GetDashboardStatisticsAsync()
+    {
+        var archiveStats = await GetArchiveStatisticsAsync();
+
+        return new DashboardStatisticsDto
+        {
+            TotalFiles = archiveStats.TotalFiles,
+            TotalSizeBytes = archiveStats.TotalSizeBytes,
+            TotalMetadataEntries = archiveStats.TotalMetadataEntries,
+            MetadataCompleteness = archiveStats.MetadataCompleteness,
+            FileTypeDistribution = new Dictionary<string, int>(archiveStats.FileTypeDistribution)
+        };
+    }
+
     private sealed class FileStatsRow
     {
         public int Count { get; set; }

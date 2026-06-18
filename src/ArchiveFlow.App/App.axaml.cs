@@ -89,6 +89,15 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IDublinCoreExportService, ArchiveFlow.Infrastructure.Export.DublinCoreExportService>();
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IStatisticsService, ArchiveFlow.Infrastructure.Services.SqliteStatisticsService>();
         services.AddTransient<ArchiveFlow.App.ViewModels.DashboardViewModel>();
+        // Register Smart Collection Repository
+        services.AddSingleton<ArchiveFlow.Application.Interfaces.ISmartCollectionRepository, ArchiveFlow.Infrastructure.Database.Repositories.SqliteSmartCollectionRepository>();
+        // Register Statistics Service
+        services.AddSingleton<ArchiveFlow.Application.Interfaces.IStatisticsService, ArchiveFlow.Infrastructure.Services.SqliteStatisticsService>();
+        // Register Dashboard ViewModel
+        services.AddTransient<ArchiveFlow.App.ViewModels.DashboardViewModel>();
+        services.AddSingleton<ArchiveFlow.Application.Interfaces.IFullTextSearchService, 
+    ArchiveFlow.Infrastructure.Search.FullTextSearchService>();
+        services.AddSingleton<ArchiveFlow.Application.Interfaces.IFileOperationService, ArchiveFlow.Infrastructure.FileSystem.LocalFileOperationService>();
         
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb

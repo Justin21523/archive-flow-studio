@@ -11,7 +11,9 @@ public class NodeExecutionContext
 {
     public List<FileRecord> CurrentFileSet { get; private set; } = new();
     public Dictionary<string, object> SharedData { get; private set; } = new();
-
+    public bool IsPreviewMode { get; set; } = false;
+    public List<string> PreviewMessages { get; } = new List<string>();
+    
     public void SetFileSet(IEnumerable<FileRecord> files)
     {
         CurrentFileSet = new List<FileRecord>(files);

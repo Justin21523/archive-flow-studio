@@ -52,6 +52,10 @@ public partial class NodeCanvasViewModel : ObservableObject
     private readonly IServiceProvider _serviceProvider;
     private readonly IRelationshipRepository _relationshipRepository;
     private readonly IDublinCoreExportService _dcExportService;
+    private readonly ISmartCollectionRepository _smartCollectionRepository;
+    private readonly IFullTextSearchService _fullTextSearchService;
+    private readonly IFileOperationService _fileOperationService;
+
     public ObservableCollection<NodeLibraryItem> NodeLibraryTree { get; } = new();
     public ObservableCollection<NodeCategoryGroup> NodeLibraryGroups { get; } = new();
     public event Action? NodesChanged;
@@ -80,7 +84,9 @@ public partial class NodeCanvasViewModel : ObservableObject
     private const double NodeDefaultWidth = 200;
     private const double NodeDefaultHeight = 130;
     private PortViewModel? _connectingSourcePort;
-
+    private NodeExecutionContext? _lastPreviewContext;
+    private List<NodeViewModel>? _sortedNodesForApply;
+    
     public NodeCanvasViewModel(
         IFileRepository fileRepository, 
         IMetadataRepository metadataRepository,
@@ -93,6 +99,9 @@ public partial class NodeCanvasViewModel : ObservableObject
         IServiceProvider serviceProvider,
         IRelationshipRepository relationshipRepository,
         IDublinCoreExportService dcExportService,
+        ISmartCollectionRepository smartCollectionRepository,
+        IFullTextSearchService fullTextSearchService,
+        IFileOperationService fileOperationService,
         ILogger<NodeCanvasViewModel> logger)
     {
         _fileRepository = fileRepository;
@@ -106,6 +115,9 @@ public partial class NodeCanvasViewModel : ObservableObject
         _serviceProvider = serviceProvider;
         _relationshipRepository = relationshipRepository;
         _dcExportService = dcExportService;
+        _smartCollectionRepository = smartCollectionRepository;
+        _fullTextSearchService = fullTextSearchService;
+        _fileOperationService = fileOperationService;
         _logger = logger;
         
         InitializeDefaultNodes();
@@ -121,7 +133,17 @@ public partial class NodeCanvasViewModel : ObservableObject
     [RelayCommand] private void AddSort() => AddNodeInternal("Sort", "Sort", 500, 100, "size:desc");
     [RelayCommand] private void AddLimit() => AddNodeInternal("Limit", "Limit", 500, 150, "100");
     [RelayCommand] private void AddRegexSearch() => AddNodeInternal("Regex Search", "RegexSearch", 300, 500, "name:^report_.*");
-    
+    [RelayCommand] private void AddCreateSmartCollection() => AddNodeInternal("Create Smart Collection", "CreateSmartCollection", 700, 250, "MyCollection");
+    [RelayCommand] private void AddSmartCollectionSource() => AddNodeInternal("Smart Collection Source", "SmartCollectionSource", 100, 250, "MyCollection");
+    [RelayCommand] 
+    private void AddFullTextSearch() => AddNodeInternal(
+        "Full-Text Search", 
+        "FullTextSearch", 
+        300, 300, 
+        "search keyword");
+    [RelayCommand] private void AddRenameFile() => AddNodeInternal("Rename File", "RenameFile", 400, 300, "Prefix|Suffix");
+    [RelayCommand] private void AddMoveFile() => AddNodeInternal("Move File", "MoveFile", 400, 350, "/path/to/target");
+
     /// <summary>
     /// Dynamically builds the hierarchical Node Library from the NodeRegistry.
     /// </summary>
@@ -398,7 +420,6 @@ public partial class NodeCanvasViewModel : ObservableObject
     [RelayCommand] private void AddFilterTxt() => AddNodeInternal("Filter: .txt", "FilterTxt");
     [RelayCommand] private void AddFilterMd() => AddNodeInternal("Filter: .md", "FilterMd");
     [RelayCommand] private void AddDynamicRule() => AddNodeInternal("Dynamic Rule", "DynamicRule", "type:.png");
-    [RelayCommand] private void AddFullTextSearch() => AddNodeInternal("Full Text Search", "FullTextSearch", "search term");
 
     // Actions
     [RelayCommand] private void AddTagAI() => AddNodeInternal("Add Tag: AI", "AddTagAI");
@@ -447,7 +468,14 @@ public partial class NodeCanvasViewModel : ObservableObject
             "Sort" => new SortNode(GetParam("Sort Rule", vm.ParameterValue)),
             "Limit" => new LimitNode(int.TryParse(GetParam("Max Count", vm.ParameterValue), out int limit) ? limit : 100),
             "RegexSearch" => new RegexSearchNode(GetParam("Regex Rule", vm.ParameterValue)),
-            
+            "CreateSmartCollection" => new CreateSmartCollectionNode(
+                _smartCollectionRepository, 
+                GetParam("Collection Name", vm.ParameterValue), 
+                GetParam("Rule JSON", "{}")),
+            "SmartCollectionSource" => new SmartCollectionSourceNode(
+                _smartCollectionRepository, 
+                _fileRepository, 
+                GetParam("Collection Name", vm.ParameterValue)),            
             // 修正：優先讀取 "Target File ID" 參數，如果沒有則讀取 ParameterValue
             "CreateRelationship" => new CreateRelationshipNode(
                 _relationshipRepository, 
@@ -464,7 +492,18 @@ public partial class NodeCanvasViewModel : ObservableObject
             "ExportCsv" => new ExportCsvNode(GetParam("Filename", vm.ParameterValue)),
             "ExportJson" => new ExportJsonNode(GetParam("Filename", vm.ParameterValue)),
             "ExportDcXml" => new ExportDublinCoreNode(_dcExportService, GetParam("Filename", vm.ParameterValue)),
-            _ => throw new InvalidOperationException($"Unknown or unregistered node type: {vm.NodeType}")
+            "FullTextSearch" => new FullTextSearchNode(
+                _fullTextSearchService, 
+                GetParam("Search Query", vm.ParameterValue),
+                int.TryParse(GetParam("Max Results", "100"), out var max) ? max : 100),
+            "RenameFile" => new RenameFileNode(
+                _fileOperationService, 
+                GetParam("Prefix", ""), 
+                GetParam("Suffix", "_archived")),
+            "MoveFile" => new MoveFileNode(
+                _fileOperationService, 
+                GetParam("Target Directory", "")),
+            _ => throw new InvalidOperationException($"Unknown node type: {vm.NodeType}")
         };
     }
     public void UpdateCanvasViewportCenter(double centerX, double centerY)
@@ -483,7 +522,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     private void AddNodeInternal(string title, string type, double x, double y, string defaultParam = "")
     {
         double offsetX = (Nodes.Count % 5) * 30;
-        var newNode = new NodeViewModel(title, type, x + offsetX, y, defaultParam);
+        var newNode = new NodeViewModel(title, type, x + (Nodes.Count % 5) * 30, y, defaultParam);
 
         // Initialize parameters based on node type
         switch (type)
@@ -494,10 +533,6 @@ public partial class NodeCanvasViewModel : ObservableObject
                 break;
             case "DynamicRule":
                 newNode.AddTextParam("Rule", defaultParam);
-                break;
-            case "FullTextSearch":
-                newNode.AddTextParam("Keyword", "search term");
-                newNode.AddDropdownParam("Mode", "Exact", "Fuzzy", "Regex");
                 break;
             case "ConditionBranch":
                 newNode.AddDropdownParam("Field", "size", "extension", "name", "status");
@@ -534,6 +569,24 @@ public partial class NodeCanvasViewModel : ObservableObject
                 break;
             case "RegexSearch":
                 newNode.AddTextParam("Regex Rule", defaultParam);
+                break;
+            case "CreateSmartCollection":
+                newNode.AddTextParam("Collection Name", defaultParam);
+                newNode.AddTextParam("Rule JSON", "{\"Field\":\"extension\", \"Value\":\".pdf\"}");
+                break;
+            case "SmartCollectionSource":
+                newNode.AddTextParam("Collection Name", defaultParam);
+                break;
+            case "FullTextSearch":
+                newNode.AddTextParam("Search Query", "keyword");
+                newNode.AddNumberParam("Max Results", "100");
+                break;
+            case "RenameFile":
+                newNode.AddTextParam("Prefix", "");
+                newNode.AddTextParam("Suffix", "_archived");
+                break;
+            case "MoveFile":
+                newNode.AddTextParam("Target Directory", Path.Combine(Directory.GetCurrentDirectory(), "Data", "Archived"));
                 break;
             default:
                 newNode.AddTextParam("General Parameter", defaultParam);
@@ -692,60 +745,37 @@ public partial class NodeCanvasViewModel : ObservableObject
     [RelayCommand]
     private async Task ExecuteWorkflowAsync()
     {
-        ExecutionLog = "Executing workflow...\n";
+        ExecutionLog = "--- PHASE 1: PREVIEW ---\n";
         ResultFiles.Clear();
-        PendingPreviews.Clear();
-        HasPendingActions = false;
 
         try
         {
             var sortedNodes = GetTopologicalOrder();
-            var context = new NodeExecutionContext();
-            var actionNodesToApply = new List<(NodeViewModel Vm, IActionNode Node)>();
-
-            // Phase 1: Execute Query Nodes & Collect Action Nodes
+            
+            // Phase 1: Preview Mode
+            var previewContext = new NodeExecutionContext { IsPreviewMode = true };
             foreach (var nodeVm in sortedNodes)
             {
                 var backendNode = CreateBackendNode(nodeVm);
-                
-                if (backendNode is IActionNode actionNode)
-                {
-                    // Don't execute yet, just collect for preview
-                    var preview = await actionNode.PreviewAsync(context);
-                    PendingPreviews.Add(preview);
-                    actionNodesToApply.Add((nodeVm, actionNode));
-                    nodeVm.Status = "Pending Apply";
-                }
-                else
-                {
-                    // Execute Query Nodes immediately
-                    nodeVm.Status = "Running";
-                    await backendNode.ExecuteAsync(context);
-                    nodeVm.Status = $"Success ({context.CurrentFileSet.Count})";
-                    ExecutionLog += $"[{nodeVm.Title}] Count: {context.CurrentFileSet.Count}\n";
-                }
+                await backendNode.ExecuteAsync(previewContext, CancellationToken.None);
             }
 
-            // Populate Result Table with the current file set (after all Query Nodes)
-            foreach (var file in context.CurrentFileSet) ResultFiles.Add(file);
-
-            // Phase 2: Check if there are pending actions
-            if (actionNodesToApply.Count > 0)
+            // Display Preview Messages
+            foreach (var msg in previewContext.PreviewMessages)
             {
-                HasPendingActions = true;
-                ExecutionLog += $"\n--- PAUSED ---\n{actionNodesToApply.Count} Action(s) require your confirmation.\nReview the Preview panel and click 'Apply Changes' to proceed.\n";
+                ExecutionLog += msg + "\n";
             }
-            else
-            {
-                ExecutionLog += "\nWorkflow completed successfully (Query Only).\n";
-            }
+            ExecutionLog += "\n--- WAITING FOR CONFIRMATION ---\nReview the preview above. Click 'Apply Changes' to execute physical operations.\n";
+            
+            // Store the context for the Apply phase (In a real app, use a better state management)
+            _lastPreviewContext = previewContext; 
+            _sortedNodesForApply = sortedNodes;
         }
         catch (Exception ex) 
         { 
-            ExecutionLog += $"Error: {ex.Message}\n"; 
+            ExecutionLog += $"Error during preview: {ex.Message}\n"; 
         }
     }
-    
     // 新增 Apply Changes Command
     [RelayCommand]
     private async Task ApplyPendingActionsAsync()
@@ -784,6 +814,44 @@ public partial class NodeCanvasViewModel : ObservableObject
         PendingPreviews.Clear();
         ExecutionLog += "All changes applied and saved.\n";
     }          
+
+    // 5. 新增 Apply Command
+    [RelayCommand]
+    private async Task ApplyChangesAsync()
+    {
+        if (_sortedNodesForApply == null)
+        {
+            ExecutionLog += "No pending changes to apply. Please run Preview first.\n";
+            return;
+        }
+
+        ExecutionLog += "--- PHASE 2: APPLYING CHANGES ---\n";
+        
+        try
+        {
+            var applyContext = new NodeExecutionContext { IsPreviewMode = false };
+            foreach (var nodeVm in _sortedNodesForApply)
+            {
+                nodeVm.Status = "Applying...";
+                var backendNode = CreateBackendNode(nodeVm);
+                await backendNode.ExecuteAsync(applyContext, CancellationToken.None);
+                nodeVm.Status = "Applied";
+            }
+
+            foreach (var msg in applyContext.PreviewMessages)
+            {
+                ExecutionLog += msg + "\n";
+            }
+            ExecutionLog += "\n--- ALL CHANGES APPLIED SUCCESSFULLY ---\n";
+            
+            // Refresh results if needed
+            _sortedNodesForApply = null;
+        }
+        catch (Exception ex) 
+        { 
+            ExecutionLog += $"Error during apply: {ex.Message}\n"; 
+        }
+    }
 
     private List<NodeViewModel> GetTopologicalOrder()
     {
@@ -906,6 +974,7 @@ public partial class NodeCanvasViewModel : ObservableObject
         var search = new NodeLibraryItem("Search", isCategory: true);
         search.Children.Add(new NodeLibraryItem("Full Text Search", "FullTextSearch"));
         search.Children.Add(new NodeLibraryItem("Regex Search", "RegexSearch"));
+        search.Children.Add(new NodeLibraryItem("Full-Text Search", "FullTextSearch"));
         processors.Children.Add(search);
 
         var transform = new NodeLibraryItem("Transform", isCategory: true);

@@ -6,29 +6,30 @@ using System.Threading.Tasks;
 namespace ArchiveFlow.Application.Nodes.Query;
 
 /// <summary>
-/// Limits the number of files in the current set.
-/// Parameter: number of files to keep (e.g., "100")
+/// Limits the current file set to a maximum number of files.
 /// </summary>
 public class LimitNode : IArchiveNode
 {
-    public int MaxCount { get; set; } = 100;
+    public int MaxResults { get; set; }
 
     public Guid Id { get; } = Guid.NewGuid();
-    public string DisplayName => $"Limit: {MaxCount}";
+    public string DisplayName => $"Limit: {MaxResults}";
     public double X { get; set; }
     public double Y { get; set; }
 
-    public LimitNode(int maxCount)
+    public LimitNode(int maxResults = 100)
     {
-        MaxCount = maxCount;
+        MaxResults = maxResults;
     }
 
     public Task ExecuteAsync(NodeExecutionContext context, CancellationToken cancellationToken = default)
     {
-        if (MaxCount <= 0) return Task.CompletedTask;
+        if (MaxResults < 0)
+        {
+            MaxResults = 0;
+        }
 
-        var limited = context.CurrentFileSet.Take(MaxCount).ToList();
-        context.SetFileSet(limited);
+        context.SetFileSet(context.CurrentFileSet.Take(MaxResults).ToList());
         return Task.CompletedTask;
     }
 }

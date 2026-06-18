@@ -60,6 +60,19 @@ public class FileRecord
         FileSize = fileSize;
     }
 
+    public void UpdatePath(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("File path cannot be empty.", nameof(filePath));
+        }
+
+        FilePath = filePath;
+        FileName = Path.GetFileName(filePath);
+        FileExtension = Path.GetExtension(filePath).ToLowerInvariant();
+        ModifiedAt = File.Exists(filePath) ? File.GetLastWriteTimeUtc(filePath) : DateTime.UtcNow;
+    }
+
     public FileStatus GetStatus()
     {
         return (FileStatus)Status;
