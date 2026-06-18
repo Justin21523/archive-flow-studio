@@ -42,6 +42,9 @@
             <TabItem Header="Workspace">
                 <views:NodeCanvasView/>
             </TabItem>
+            <TabItem Header="Graph Explorer" x:Name="GraphExplorerTab">
+                <views:GraphExplorerView/>
+            </TabItem>
             <!-- 新增 Database Manager Tab -->
             <TabItem Header="Database Manager">
                 <views:DatabaseManagerView DataContext="{DynamicResource DatabaseManagerViewModel}"/>

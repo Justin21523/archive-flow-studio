@@ -14,6 +14,10 @@ public partial class MainWindow : Window
         {
             dbTab.DataContext = App.Services.GetService<ArchiveFlow.App.ViewModels.DatabaseManagerViewModel>();
         }
+        if (this.FindControl<TabItem>("GraphExplorerTab") is TabItem graphTab)
+        {
+            graphTab.DataContext = App.Services.GetService<ArchiveFlow.App.ViewModels.GraphExplorerViewModel>();
+        }
     }
 
     private void Exit_Click(object? sender, RoutedEventArgs e) => Close();

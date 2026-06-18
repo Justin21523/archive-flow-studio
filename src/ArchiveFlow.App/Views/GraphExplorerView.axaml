@@ -1,0 +1,91 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ArchiveFlow.App.ViewModels"
+             x:Class="ArchiveFlow.App.Views.GraphExplorerView"
+             x:DataType="vm:GraphExplorerViewModel">
+
+    <Grid ColumnDefinitions="300,*">
+        <!-- Left: File Selector -->
+        <Border Grid.Column="0" Background="#252526" Margin="10">
+            <Grid RowDefinitions="Auto,*">
+                <StackPanel Margin="15">
+                    <TextBlock Text="Knowledge Graph Explorer" FontWeight="Bold" Foreground="White" FontSize="16" Margin="0,0,0,15"/>
+                    <TextBlock Text="Select a file to explore its relationships:" Foreground="Gray" Margin="0,0,0,10"/>
+                    <Button Content="Refresh File List" Command="{Binding LoadDataCommand}" Classes="accent" HorizontalAlignment="Stretch" Margin="0,0,0,15"/>
+                    
+                    <ComboBox ItemsSource="{Binding AvailableFiles}" 
+                              SelectedItem="{Binding SelectedFile}"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding FileName}" Foreground="White"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+
+                <Border Grid.Row="1" Margin="15,0,15,15" Background="#1E1E1E" CornerRadius="4">
+                    <ListBox ItemsSource="{Binding AvailableFiles}" Margin="5">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding FileName}" Foreground="White" TextTrimming="CharacterEllipsis"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Right: Graph Canvas -->
+        <Border Grid.Column="1" Background="#1E1E1E" Margin="0,10,10,10" CornerRadius="4" ClipToBounds="True">
+            <Canvas Width="800" Height="600" Background="Transparent">
+                <!-- Draw Edges -->
+                <ItemsControl ItemsSource="{Binding GraphEdges}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <Canvas />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:GraphEdgeViewModel">
+                            <Grid>
+                                <Line X1="{Binding X1}" Y1="{Binding Y1}" X2="{Binding X2}" Y2="{Binding Y2}" 
+                                      Stroke="#007ACC" StrokeThickness="2" Opacity="0.6"/>
+                                <TextBlock Text="{Binding RelationType}" 
+                                           Foreground="#888" FontSize="10"
+                                           Canvas.Left="{Binding X1}" Canvas.Top="{Binding Y1}"
+                                           Margin="5,-15,0,0"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Draw Nodes -->
+                <ItemsControl ItemsSource="{Binding GraphNodes}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <Canvas />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:GraphNodeViewModel">
+                            <Border Width="100" Height="40" 
+                                    CornerRadius="20" 
+                                    Background="{Binding IsCenter, Converter={x:Static conv:BoolToBrushConverter.Instance}}"
+                                    BorderBrush="#007ACC" BorderThickness="2"
+                                    Canvas.Left="{Binding X}" Canvas.Top="{Binding Y}"
+                                    BoxShadow="0 4 6 rgba(0,0,0,0.3)">
+                                <TextBlock Text="{Binding Label}" 
+                                           Foreground="White" 
+                                           HorizontalAlignment="Center" 
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           Margin="5"/>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Canvas>
+        </Border>
+    </Grid>
+</UserControl>

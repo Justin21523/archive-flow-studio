@@ -31,6 +31,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     private readonly IAutoTaggingService _autoTaggingService;
     private readonly IBatchJobService _batchJobService;
     private readonly NodeRegistry _nodeRegistry;
+    private readonly IRelationshipRepository _relationshipRepository;
     public ObservableCollection<NodeLibraryItem> NodeLibraryTree { get; } = new();
 
     public ObservableCollection<NodeViewModel> Nodes { get; } = new();
@@ -89,6 +90,8 @@ public partial class NodeCanvasViewModel : ObservableObject
             PluginNodeDefinitions.Add(def);
         }
     }
+    [RelayCommand] private void AddCreateRelationship() => AddNodeInternal("Link to Target", "CreateRelationship", 450, 150, "TARGET_FILE_ID_HERE");
+    [RelayCommand] private void AddFindRelated() => AddNodeInternal("Find Related", "FindRelated", 450, 250, "SOURCE_FILE_ID_HERE");
 
     // 新增 Command 用於動態新增插件節點
     [RelayCommand]
@@ -141,7 +144,7 @@ public partial class NodeCanvasViewModel : ObservableObject
             // Trigger UI refresh
         }
     }
-    
+
     // 4. 新增訂閱背景任務事件的方法
     private void SubscribeToBatchJobEvents()
     {
@@ -256,6 +259,8 @@ public partial class NodeCanvasViewModel : ObservableObject
             "AutoTag" => new AutoTagNode(_autoTaggingService),
             "ConditionBranch" => new ConditionBranchNode(vm.ParameterValue),
             "MergeBranches" => new MergeBranchesNode(),
+            "CreateRelationship" => new CreateRelationshipNode(_relationshipRepository, vm.ParameterValue, "References"),
+            "FindRelated" => new FindRelatedFilesNode(_relationshipRepository, _fileRepository, vm.ParameterValue),
             _ => (IArchiveNode?)null
         };
 
@@ -648,6 +653,11 @@ public partial class NodeCanvasViewModel : ObservableObject
         outputs.Children.Add(new NodeLibraryItem("Export CSV", "ExportCsv"));
         outputs.Children.Add(new NodeLibraryItem("Export JSON", "ExportJson"));
         NodeLibraryTree.Add(outputs);
+
+        // Relationship
+        var relationships = new NodeLibraryItem("Relationships", isCategory: true);
+        relationships.Children.Add(new NodeLibraryItem("Link to Target", "CreateRelationship"));
+        relationships.Children.Add(new NodeLibraryItem("Find Related", "FindRelated"));
     }
 
 }

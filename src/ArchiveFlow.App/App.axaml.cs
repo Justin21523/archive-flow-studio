@@ -78,6 +78,10 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         services.AddSingleton<ArchiveFlow.Application.Services.NodeRegistry>();
         services.AddSingleton<ArchiveFlow.Infrastructure.Services.PluginManager>();
         services.AddTransient<ArchiveFlow.App.ViewModels.DatabaseManagerViewModel>();
+        // Register Relationship Repository
+        services.AddSingleton<ArchiveFlow.Application.Interfaces.IRelationshipRepository, ArchiveFlow.Infrastructure.Database.Repositories.SqliteRelationshipRepository>();
+        // Register Graph Explorer ViewModel
+        services.AddTransient<ArchiveFlow.App.ViewModels.GraphExplorerViewModel>();
         
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb
