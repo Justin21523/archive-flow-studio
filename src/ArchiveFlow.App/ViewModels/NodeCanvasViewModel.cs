@@ -26,6 +26,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     private readonly ILogger<NodeCanvasViewModel> _logger;
     private readonly IWorkflowStorageService _workflowStorage; 
     private readonly IFilePreviewService _previewService;
+    private readonly IAutoTaggingService _autoTaggingService;
 
     public ObservableCollection<NodeViewModel> Nodes { get; } = new();
     public ObservableCollection<EdgeViewModel> Edges { get; } = new();
@@ -52,12 +53,14 @@ public partial class NodeCanvasViewModel : ObservableObject
         ISearchService searchService,
         IWorkflowStorageService workflowStorage, 
         IFilePreviewService previewService,
+        IAutoTaggingService autoTaggingService,
         ILogger<NodeCanvasViewModel> logger)
     {
         _fileRepository = fileRepository;
         _metadataRepository = metadataRepository;
         _searchService = searchService;
         _previewService = previewService;
+        _autoTaggingService = autoTaggingService;
         _logger = logger;
         
         _logger.LogInformation("NodeCanvasViewModel constructor called");
@@ -97,7 +100,33 @@ public partial class NodeCanvasViewModel : ObservableObject
     [RelayCommand] private void AddExportCsv() => AddNodeInternal("Export CSV", "ExportCsv", "output.csv");
     [RelayCommand] private void AddExportJson() => AddNodeInternal("Export JSON", "ExportJson", "output.json");
     [RelayCommand] private void AddResultTable() => AddNodeInternal("Result Table", "Result");
+    [RelayCommand] private void AddAutoTag() => AddNodeInternal("Auto-Tag Files", "AutoTag");
+    [RelayCommand] private void AddConditionBranch() => AddNodeInternal("Condition Branch", "ConditionBranch", "size:>5000");
+    [RelayCommand] private void AddMergeBranches() => AddNodeInternal("Merge Branches", "MergeBranches");
     
+    // --- Update the CreateBackendNode method to include new cases ---
+    private IArchiveNode CreateBackendNode(NodeViewModel vm)
+    {
+        return vm.NodeType switch
+        {
+            "AllFiles" => new AllFilesNode(_fileRepository, _searchService, _previewService),
+            "FilterTxt" => new FileTypeFilterNode(".txt"),
+            "FilterMd" => new FileTypeFilterNode(".md"),
+            "Result" => new PassThroughNode(),
+            "AddTagAI" => new AddTagNode(_metadataRepository, "AI"),
+            "SetSubjectCS" => new SetSubjectNode(_metadataRepository, "Computer Science"),
+            "FullTextSearch" => new FullTextSearchNode(_searchService, vm.ParameterValue),
+            "ExportCsv" => new ExportCsvNode(vm.ParameterValue),
+            "ExportJson" => new ExportJsonNode(vm.ParameterValue),
+            "DynamicRule" => new DynamicRuleNode(vm.ParameterValue),
+            // New DAG & AI Nodes
+            "AutoTag" => new AutoTagNode(_autoTaggingService),
+            "ConditionBranch" => new ConditionBranchNode(vm.ParameterValue),
+            "MergeBranches" => new MergeBranchesNode(),
+            _ => throw new InvalidOperationException($"Unknown node type: {vm.NodeType}")
+        };
+    }
+
     public void UpdateCanvasViewportCenter(double centerX, double centerY)
     {
         CanvasViewportCenterX = Math.Max(NodeDefaultWidth / 2, centerX);
@@ -312,24 +341,6 @@ public partial class NodeCanvasViewModel : ObservableObject
         var sortedIds = new List<Guid>();
         while (queue.Count > 0) { var curr = queue.Dequeue(); sortedIds.Add(curr); foreach (var n in adj[curr]) { inDegree[n]--; if (inDegree[n] == 0) queue.Enqueue(n); } }
         return Nodes.Where(n => sortedIds.Contains(n.Id)).OrderBy(n => sortedIds.IndexOf(n.Id)).ToList();
-    }
-
-    private IArchiveNode CreateBackendNode(NodeViewModel vm)
-    {
-        return vm.NodeType switch
-        {
-            "AllFiles" => new AllFilesNode(_fileRepository, _searchService, _previewService), 
-            "FilterTxt" => new FileTypeFilterNode(".txt"),
-            "FilterMd" => new FileTypeFilterNode(".md"),
-            "Result" => new PassThroughNode(),
-            "AddTagAI" => new AddTagNode(_metadataRepository, "AI"),
-            "SetSubjectCS" => new SetSubjectNode(_metadataRepository, "Computer Science"),
-            "FullTextSearch" => new FullTextSearchNode(_searchService, vm.ParameterValue),
-            "ExportCsv" => new ExportCsvNode(vm.ParameterValue),
-            "ExportJson" => new ExportJsonNode(vm.ParameterValue),
-            "DynamicRule" => new DynamicRuleNode(vm.ParameterValue),
-            _ => throw new InvalidOperationException($"Unknown: {vm.NodeType}")
-        };
     }
 
     // --- 新增：Save/Load Workflow ---

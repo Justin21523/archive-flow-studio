@@ -70,7 +70,8 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IWorkflowStorageService, ArchiveFlow.Infrastructure.Storage.LocalWorkflowStorageService>();
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IFilePreviewService, ArchiveFlow.Infrastructure.Preview.FilePreviewService>();
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IMockDataService, ArchiveFlow.Infrastructure.Services.MockDataService>();
-        
+        services.AddSingleton<ArchiveFlow.Application.Interfaces.IAutoTaggingService, ArchiveFlow.Infrastructure.Services.LocalKeywordTaggingService>();
+
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb
                 .AddSQLite()

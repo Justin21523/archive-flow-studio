@@ -36,6 +36,14 @@
                             <Button Content="Set Subject: CS" Command="{Binding AddSubjectCSCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
                         </StackPanel>
                     </Expander>
+                    
+                    <Expander Header="AI &amp; DAG Logic" IsExpanded="True" Margin="0,2">
+                        <StackPanel Margin="10,5">
+                            <Button Content="Auto-Tag Files" Command="{Binding AddAutoTagCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                            <Button Content="Condition Branch" Command="{Binding AddConditionBranchCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                            <Button Content="Merge Branches" Command="{Binding AddMergeBranchesCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                        </StackPanel>
+                    </Expander>
 
                     <Expander Header="Search &amp; Export" IsExpanded="True" Margin="0,2">
                         <StackPanel Margin="10,5">
@@ -86,6 +94,11 @@
                                 <MenuItem Header="Add Tag: AI" Command="{Binding AddTagAICommand}"/>
                                 <MenuItem Header="Set Subject: CS" Command="{Binding AddSubjectCSCommand}"/>
                             </MenuItem>
+                            <MenuItem Header="AI &amp; DAG Logic">
+                                <MenuItem Header="Auto-Tag Files" Command="{Binding AddAutoTagCommand}"/>
+                                <MenuItem Header="Condition Branch" Command="{Binding AddConditionBranchCommand}"/>
+                                <MenuItem Header="Merge Branches" Command="{Binding AddMergeBranchesCommand}"/>
+                            </MenuItem>                           
                             <MenuItem Header="Outputs">
                                 <MenuItem Header="Result Table" Command="{Binding AddResultTableCommand}"/>
                             </MenuItem>
