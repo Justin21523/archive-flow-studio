@@ -26,3 +26,11 @@ Thumbs.db
 node_modules/
 EOF
 
+
+# Published releases
+publish/
+
+# Build output
+*.exe
+*.dll
+*.pdb
