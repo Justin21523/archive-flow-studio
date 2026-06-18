@@ -128,13 +128,7 @@ public partial class GraphEdgeViewModel : ObservableObject
     public GraphNodeViewModel Target { get; }
     
     [ObservableProperty] private string _relationType = string.Empty;
-    [ObservableProperty] private double _x1;
-    [ObservableProperty] private double _y1;
-    [ObservableProperty] private double _x2;
-    [ObservableProperty] private double _y2;
-
-    public Point StartPoint => new(X1, Y1);
-    public Point EndPoint => new(X2, Y2);
+    [ObservableProperty] private string _pathData = string.Empty; // 改為 PathData
 
     public GraphEdgeViewModel(GraphNodeViewModel source, GraphNodeViewModel target, string relationType)
     {
@@ -142,10 +136,19 @@ public partial class GraphEdgeViewModel : ObservableObject
         Target = target;
         RelationType = relationType;
         
-        // Calculate center points for the nodes (assuming node size is roughly 100x40)
-        X1 = source.X + 50;
-        Y1 = source.Y + 20;
-        X2 = target.X + 50;
-        Y2 = target.Y + 20;
+        // 計算節點中心點 (假設節點大小 120x40)
+        double x1 = source.X + 60;
+        double y1 = source.Y + 20;
+        double x2 = target.X + 60;
+        double y2 = target.Y + 20;
+
+        // 計算貝茲曲線控制點
+        double dx = Math.Abs(x2 - x1) * 0.5;
+        double cx1 = x1 + dx;
+        double cy1 = y1;
+        double cx2 = x2 - dx;
+        double cy2 = y2;
+
+        PathData = $"M {x1},{y1} C {cx1},{cy1} {cx2},{cy2} {x2},{y2}";
     }
 }

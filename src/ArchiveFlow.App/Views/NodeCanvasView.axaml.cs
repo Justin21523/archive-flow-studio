@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using ArchiveFlow.App.ViewModels;
+using ArchiveFlow.Application.Nodes.Definitions;
 using ArchiveFlow.Domain.Entities;
 using System;
 using System.Collections.Generic;
@@ -399,36 +400,11 @@ public partial class NodeCanvasView : UserControl
     }
 
     // 新增方法：處理 TreeView 節點點擊
-    private void NodeLibraryItem_PointerPressed(object sender, PointerPressedEventArgs e)
+    private void NodeLibraryItem_PointerPressed(object sender, Avalonia.Input.PointerPressedEventArgs e)
     {
-        if (sender is Border border && border.Tag is string nodeType && !string.IsNullOrEmpty(nodeType))
+        if (sender is Border border && border.Tag is NodeDefinition definition)
         {
-            var command = nodeType switch
-            {
-                "AllFiles" => _viewModel?.AddAllFilesCommand,
-                "FolderScanner" => _viewModel?.AddFolderScannerCommand,
-                "FilterTxt" => _viewModel?.AddFilterTxtCommand,
-                "FilterMd" => _viewModel?.AddFilterMdCommand,
-                "FullTextSearch" => _viewModel?.AddFullTextSearchCommand,
-                "DynamicRule" => _viewModel?.AddDynamicRuleCommand,
-                "AddTagAI" => _viewModel?.AddTagAICommand,
-                "SetSubjectCS" => _viewModel?.AddSubjectCSCommand,
-                "AutoTag" => _viewModel?.AddAutoTagCommand,
-                "ConditionBranch" => _viewModel?.AddConditionBranchCommand,
-                "MergeBranches" => _viewModel?.AddMergeBranchesCommand,
-                "CreateRelationship" => _viewModel?.AddCreateRelationshipCommand,
-                "FindRelated" => _viewModel?.AddFindRelatedCommand,
-                "Result" => _viewModel?.AddResultTableCommand,
-                "ExportCsv" => _viewModel?.AddExportCsvCommand,
-                "ExportJson" => _viewModel?.AddExportJsonCommand,
-                "ExportDcXml" => _viewModel?.AddExportDublinCoreCommand,
-                _ => null
-            };
-            
-            if (command?.CanExecute(null) == true)
-            {
-                command.Execute(null);
-            }
+            _viewModel?.AddNodeFromDefinitionCommand.Execute(definition);
         }
     }
 

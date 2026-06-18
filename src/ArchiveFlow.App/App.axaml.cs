@@ -36,6 +36,10 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
 
         var dbInitializer = Services.GetRequiredService<IDatabaseInitializer>();
         dbInitializer.Initialize();
+        
+        // Register all built-in nodes into the registry
+        var nodeRegistry = Services.GetRequiredService<ArchiveFlow.Application.Services.NodeRegistry>();
+        ArchiveFlow.Application.Services.BuiltInNodeRegistrar.RegisterAll(nodeRegistry, Services);
 
         var pluginManager = Services.GetRequiredService<ArchiveFlow.Infrastructure.Services.PluginManager>();
         pluginManager.LoadPlugins();
@@ -83,7 +87,7 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         // Register Graph Explorer ViewModel
         services.AddTransient<ArchiveFlow.App.ViewModels.GraphExplorerViewModel>();
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IDublinCoreExportService, ArchiveFlow.Infrastructure.Export.DublinCoreExportService>();
-        
+
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb
                 .AddSQLite()

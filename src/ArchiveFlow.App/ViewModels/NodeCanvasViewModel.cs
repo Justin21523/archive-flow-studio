@@ -9,6 +9,7 @@ using ArchiveFlow.Application.Interfaces;
 using ArchiveFlow.Application.Nodes;
 using ArchiveFlow.Application.Nodes.Query;
 using ArchiveFlow.Application.Nodes.Actions;
+using ArchiveFlow.Application.Nodes.Definitions;
 using ArchiveFlow.Domain.Entities;
 using ArchiveFlow.Application.DTOs;
 using ArchiveFlow.Application.Services;
@@ -20,8 +21,19 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using NodeDefinition = ArchiveFlow.Application.Nodes.Definitions.NodeDefinition;
+using NodeRegistry = ArchiveFlow.Application.Services.NodeRegistry;
 
 namespace ArchiveFlow.App.ViewModels;
+
+/// <summary>
+/// Represents a grouped category in the Node Library TreeView.
+/// </summary>
+public class NodeCategoryGroup
+{
+    public string Name { get; set; } = string.Empty;
+    public ObservableCollection<NodeDefinition> Definitions { get; set; } = new();
+}
 
 public partial class NodeCanvasViewModel : ObservableObject
 {
@@ -34,15 +46,19 @@ public partial class NodeCanvasViewModel : ObservableObject
     private readonly IAutoTaggingService _autoTaggingService;
     private readonly IBatchJobService _batchJobService;
     private readonly NodeRegistry _nodeRegistry;
+    private readonly IServiceProvider _serviceProvider;
     private readonly IRelationshipRepository _relationshipRepository;
     private readonly IDublinCoreExportService _dcExportService;
     public ObservableCollection<NodeLibraryItem> NodeLibraryTree { get; } = new();
+    public ObservableCollection<NodeCategoryGroup> NodeLibraryGroups { get; } = new();
+    public event Action? NodesChanged;
 
     public ObservableCollection<NodeViewModel> Nodes { get; } = new();
     public ObservableCollection<EdgeViewModel> Edges { get; } = new();
     public ObservableCollection<FileRecord> ResultFiles { get; } = new();
     public ObservableCollection<MetadataValue> SelectedFileMetadata { get; } = new();
     public ObservableCollection<NodeDefinition> PluginNodeDefinitions { get; } = new();
+    public ObservableCollection<FileRelationship> SelectedFileRelationships { get; } = new();
 
     [ObservableProperty] private string _executionLog = "Ready. Click buttons to add nodes.";
     [ObservableProperty] private string _tempEdgePath = string.Empty;
@@ -68,6 +84,7 @@ public partial class NodeCanvasViewModel : ObservableObject
         IAutoTaggingService autoTaggingService,
         IBatchJobService batchJobService,
         NodeRegistry nodeRegistry,
+        IServiceProvider serviceProvider,
         IRelationshipRepository relationshipRepository,
         IDublinCoreExportService dcExportService,
         ILogger<NodeCanvasViewModel> logger)
@@ -80,6 +97,7 @@ public partial class NodeCanvasViewModel : ObservableObject
         _autoTaggingService = autoTaggingService;
         _batchJobService = batchJobService;
         _nodeRegistry = nodeRegistry;
+        _serviceProvider = serviceProvider;
         _relationshipRepository = relationshipRepository;
         _dcExportService = dcExportService;
         _logger = logger;
@@ -87,7 +105,93 @@ public partial class NodeCanvasViewModel : ObservableObject
         InitializeDefaultNodes();
         InitializeNodeLibraryTree(); 
         SubscribeToBatchJobEvents();
+        InitializeNodeLibraryFromRegistry();
     }
+    /// <summary>
+    /// Dynamically builds the hierarchical Node Library from the NodeRegistry.
+    /// </summary>
+    private void InitializeNodeLibraryFromRegistry()
+    {
+        NodeLibraryGroups.Clear();
+        
+        var grouped = _nodeRegistry.GetAllDefinitions()
+            .GroupBy(d => d.Category)
+            .OrderBy(g => g.Key);
+
+        foreach (var group in grouped)
+        {
+            var categoryGroup = new NodeCategoryGroup
+            {
+                Name = group.Key.ToString()
+            };
+            
+            // Optional: Sub-group by SubCategory if needed, but for now flat list per category is clean
+            foreach (var def in group.OrderBy(d => d.DisplayName))
+            {
+                categoryGroup.Definitions.Add(def);
+            }
+            
+            NodeLibraryGroups.Add(categoryGroup);
+        }
+    }
+    /// <summary>
+    /// Called when user clicks a node definition in the library.
+    /// </summary>
+    [RelayCommand]
+    private void AddNodeFromDefinition(NodeDefinition? definition)
+    {
+        if (definition == null) return;
+
+        double offsetX = (Nodes.Count % 5) * 40;
+        double offsetY = (Nodes.Count % 5) * 40;
+        
+        var newNodeVm = new NodeViewModel(definition, 200 + offsetX, 150 + offsetY);
+        Nodes.Add(newNodeVm);
+        RecalculateLayout();
+        NodesChanged?.Invoke();
+    }
+
+
+    /// <summary>
+    /// Refactored Execution Engine: Uses NodeDefinition Factory instead of hardcoded switch.
+    /// </summary>
+    private async Task ExecuteWorkflowFromDefinitionsAsync()
+    {
+        ExecutionLog = "Executing workflow...\n";
+        ResultFiles.Clear();
+
+        try
+        {
+            var sortedNodes = GetTopologicalOrder();
+            var context = new NodeExecutionContext();
+
+            foreach (var nodeVm in sortedNodes)
+            {
+                nodeVm.Status = "Running";
+                
+                // 1. Instantiate backend node via Definition Factory
+                var backendNode = nodeVm.Definition.Factory(_serviceProvider);
+                
+                // 2. Inject UI parameters into backend node
+                var paramDict = nodeVm.Parameters.ToDictionary(p => p.Key, p => p.Value);
+                nodeVm.Definition.ApplyParameters?.Invoke(backendNode, paramDict);
+                
+                // 3. Execute
+                await backendNode.ExecuteAsync(context, CancellationToken.None);
+                
+                nodeVm.Status = $"Success ({context.CurrentFileSet.Count})";
+                ExecutionLog += $"[{nodeVm.Title}] Count: {context.CurrentFileSet.Count}\n";
+            }
+
+            foreach (var file in context.CurrentFileSet) ResultFiles.Add(file);
+            ExecutionLog += $"Workflow completed. Total: {ResultFiles.Count} files\n";
+        }
+        catch (Exception ex) 
+        { 
+            ExecutionLog += $"Error: {ex.Message}\n"; 
+        }
+    }
+    
 
     // 載入插件節點到 UI 集合
     private void LoadPluginNodes()
@@ -281,54 +385,45 @@ public partial class NodeCanvasViewModel : ObservableObject
     // --- Update the CreateBackendNode method to include new cases ---
     private IArchiveNode CreateBackendNode(NodeViewModel vm)
     {
-        // 1. Check built-in nodes first
-        var builtInNode = vm.NodeType switch
+        // 輔助方法：從 Parameters 集合中安全取得數值
+        string GetParam(string label, string fallback = "") 
+        {
+            var p = vm.Parameters.FirstOrDefault(x => x.Label == label);
+            return p?.Value ?? fallback;
+        }
+
+        return vm.NodeType switch
         {
             "AllFiles" => new AllFilesNode(_fileRepository, _searchService, _previewService),
             "FolderScanner" => new FolderScannerNode(_fileRepository, _searchService, _previewService),
             "FilterTxt" => new FileTypeFilterNode(".txt"),
             "FilterMd" => new FileTypeFilterNode(".md"),
-            "FullTextSearch" => new FullTextSearchNode(_searchService, vm.ParameterValue),
-            "DynamicRule" => new DynamicRuleNode(vm.ParameterValue),
+            "DynamicRule" => new DynamicRuleNode(GetParam("Rule", vm.ParameterValue)),
             "AddTagAI" => new AddTagNode(_metadataRepository, "AI"),
             "SetSubjectCS" => new SetSubjectNode(_metadataRepository, "Computer Science"),
             "AutoTag" => new AutoTagNode(_autoTaggingService),
-            "ConditionBranch" => new ConditionBranchNode(vm.ParameterValue),
+            "ConditionBranch" => new ConditionBranchNode(GetParam("Rule", vm.ParameterValue)),
             "MergeBranches" => new MergeBranchesNode(),
-            "CreateRelationship" => new CreateRelationshipNode(_relationshipRepository, vm.ParameterValue, "References"),
-            "FindRelated" => new FindRelatedFilesNode(_relationshipRepository, _fileRepository, vm.ParameterValue),
+            
+            // 修正：優先讀取 "Target File ID" 參數，如果沒有則讀取 ParameterValue
+            "CreateRelationship" => new CreateRelationshipNode(
+                _relationshipRepository, 
+                GetParam("Target File ID", vm.ParameterValue), 
+                GetParam("Relation Type", "References")),
+                
+            // 修正：優先讀取 "Source File ID" 參數
+            "FindRelated" => new FindRelatedFilesNode(
+                _relationshipRepository, 
+                _fileRepository, 
+                GetParam("Source File ID", vm.ParameterValue)),
+                
             "Result" => new PassThroughNode(),
-            "ExportCsv" => new ExportCsvNode(vm.ParameterValue),
-            "ExportJson" => new ExportJsonNode(vm.ParameterValue),
-            "ExportDcXml" => new ExportDublinCoreNode(_dcExportService, vm.ParameterValue),
-            _ => (IArchiveNode?)null
+            "ExportCsv" => new ExportCsvNode(GetParam("Filename", vm.ParameterValue)),
+            "ExportJson" => new ExportJsonNode(GetParam("Filename", vm.ParameterValue)),
+            "ExportDcXml" => new ExportDublinCoreNode(_dcExportService, GetParam("Filename", vm.ParameterValue)),
+            _ => throw new InvalidOperationException($"Unknown or unregistered node type: {vm.NodeType}")
         };
-
-        if (builtInNode != null) return builtInNode;
-
-        // 2. Fallback to Plugin Registry for dynamically loaded nodes
-        if (_nodeRegistry != null)
-        {
-            var definition = _nodeRegistry.GetDefinition(vm.NodeType);
-            if (definition != null)
-            {
-                // Create instance using the plugin's factory method
-                var pluginNode = definition.Factory();
-                
-                // Set position and display name to match the UI node
-                pluginNode.X = vm.X;
-                pluginNode.Y = vm.Y;
-                // Note: DisplayName is usually read-only in the interface, but if your implementation allows setting, do it here.
-                
-                return pluginNode;
-            }
-        }
-
-        // 3. If still not found, throw an exception (or return a dummy error node)
-        _logger.LogWarning("Unknown node type encountered during execution: {NodeType}", vm.NodeType);
-        throw new InvalidOperationException($"Unknown or unregistered node type: {vm.NodeType}");
     }
-
     public void UpdateCanvasViewportCenter(double centerX, double centerY)
     {
         CanvasViewportCenterX = Math.Max(NodeDefaultWidth / 2, centerX);
@@ -343,12 +438,15 @@ public partial class NodeCanvasViewModel : ObservableObject
 
         newNode.AddTextParam("General Parameter", defaultParam);
 
-        // Initialize specific parameters based on node type
+        // Initialize parameters based on node type
         switch (type)
         {
             case "FilterTxt":
             case "FilterMd":
                 newNode.AddDropdownParam("Extension", ".txt", ".md", ".csv", ".json");
+                break;
+            case "DynamicRule":
+                newNode.AddTextParam("Rule", defaultParam);
                 break;
             case "FullTextSearch":
                 newNode.AddTextParam("Keyword", "search term");
@@ -361,26 +459,24 @@ public partial class NodeCanvasViewModel : ObservableObject
                 break;
             case "ExportCsv":
             case "ExportJson":
-                newNode.AddTextParam("Filename", "output");
-                newNode.AddDropdownParam("Encoding", "UTF-8", "ASCII");
+            case "ExportDcXml":
+                newNode.AddTextParam("Filename", defaultParam);
                 break;
             case "CreateRelationship":
                 newNode.AddTextParam("Target File ID", defaultParam);
-                newNode.AddDropdownParam("Relation Type", "References", "HasNote", "UsesAsset", "RelatedTo");
+                newNode.AddDropdownParam("Relation Type", "References", "HasNote", "UsesAsset", "IsVersionOf");
                 break;
             case "FindRelated":
                 newNode.AddTextParam("Source File ID", defaultParam);
                 break;
-            case "ExportDcXml":
-                newNode.AddTextParam("Output XML", string.IsNullOrWhiteSpace(defaultParam) ? "metadata_export.xml" : defaultParam);
+            default:
+                newNode.AddTextParam("General Parameter", defaultParam);
                 break;
         }
 
         Nodes.Add(newNode);
-        SelectNode(newNode);
         RecalculateLayout();
-        ExecutionLog += $"Added at canvas center: {title}\n";
-        _logger.LogInformation("Added node at canvas center: {Title}", title);
+        NodesChanged?.Invoke();
     }
 
     public void SelectNode(NodeViewModel? node)
@@ -490,49 +586,48 @@ public partial class NodeCanvasViewModel : ObservableObject
         foreach (var edge in Edges) edge.UpdateGeometry();
     }
 
-    public async void SelectFile(FileRecord? file) 
+    public void SelectFile(FileRecord? file) 
     {
         SelectedFile = file; 
         SelectedFileMetadata.Clear();
+        SelectedFileRelationships.Clear();
         SelectedFileThumbnail = null;
         SelectedFilePreviewText = string.Empty;
 
-        if (file == null)
+        if (file != null)
         {
-            return;
-        }
-
-        try
-        {
-            var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
-            SelectedFileMetadata.Clear();
-            foreach (var item in metadata)
+            Task.Run(async () => 
             {
-                SelectedFileMetadata.Add(item);
-            }
+                // Load Metadata
+                var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
+                foreach (var m in metadata) SelectedFileMetadata.Add(m);
 
-            if (!string.IsNullOrWhiteSpace(file.ThumbnailPath) && File.Exists(file.ThumbnailPath))
-            {
-                await using var stream = File.OpenRead(file.ThumbnailPath);
-                var bitmap = await Task.Run(() => new Bitmap(stream));
-                await Dispatcher.UIThread.InvokeAsync(() =>
+                // Load Relationships (新增)
+                if (_relationshipRepository != null)
                 {
-                    SelectedFileThumbnail = bitmap;
-                    SelectedFilePreviewText = string.Empty;
-                });
-            }
-            else if (!string.IsNullOrWhiteSpace(file.ContentPreview))
-            {
-                SelectedFilePreviewText = file.ContentPreview;
-            }
+                    var relationships = await _relationshipRepository.GetRelationshipsByFileIdAsync(file.Id);
+                    foreach (var rel in relationships) 
+                    {
+                        SelectedFileRelationships.Add(rel);
+                    }
+                }
+                // Load Preview
+                if (!string.IsNullOrEmpty(file.ThumbnailPath) && File.Exists(file.ThumbnailPath))
+                {
+                    using var stream = File.OpenRead(file.ThumbnailPath);
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => 
+                    {
+                        SelectedFileThumbnail = new Avalonia.Media.Imaging.Bitmap(stream);
+                    });
+                }
+                else if (!string.IsNullOrEmpty(file.ContentPreview))
+                {
+                    SelectedFilePreviewText = file.ContentPreview;
+                }
+            });
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to load preview for file {FileId}", file.Id);
-            ExecutionLog += $"Preview load error: {ex.Message}\n";
-        }
-    }
-
+    }            
+    
     // --- Execution ---
     [RelayCommand]
     private async Task ExecuteWorkflowAsync()
@@ -661,6 +756,9 @@ public partial class NodeCanvasViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Initializes the hierarchical node library tree with all available node types.
+    /// </summary>
     private void InitializeNodeLibraryTree()
     {
         NodeLibraryTree.Clear();
@@ -668,14 +766,15 @@ public partial class NodeCanvasViewModel : ObservableObject
         // 1. Sources
         var sources = new NodeLibraryItem("Sources", isCategory: true);
         sources.Children.Add(new NodeLibraryItem("All Files", "AllFiles"));
-        sources.Children.Add(new NodeLibraryItem("Folder Scanner", "FolderScanner")); // Placeholder
+        sources.Children.Add(new NodeLibraryItem("Folder Scanner", "FolderScanner"));
         NodeLibraryTree.Add(sources);
 
-        // 2. Processors (Query/Filter)
+        // 2. Processors (Filters & Rules)
         var processors = new NodeLibraryItem("Processors", isCategory: true);
+        
         var filters = new NodeLibraryItem("Filters", isCategory: true);
-        filters.Children.Add(new NodeLibraryItem("File Type (.txt)", "FilterTxt"));
-        filters.Children.Add(new NodeLibraryItem("File Type (.md)", "FilterMd"));
+        filters.Children.Add(new NodeLibraryItem("Filter: .txt", "FilterTxt"));
+        filters.Children.Add(new NodeLibraryItem("Filter: .md", "FilterMd"));
         filters.Children.Add(new NodeLibraryItem("Dynamic Rule", "DynamicRule"));
         processors.Children.Add(filters);
 
@@ -687,29 +786,33 @@ public partial class NodeCanvasViewModel : ObservableObject
         dag.Children.Add(new NodeLibraryItem("Condition Branch", "ConditionBranch"));
         dag.Children.Add(new NodeLibraryItem("Merge Branches", "MergeBranches"));
         processors.Children.Add(dag);
+        
         NodeLibraryTree.Add(processors);
-        // 3. Actions (Metadata/Modify)
+
+        // 3. Actions (Metadata)
         var actions = new NodeLibraryItem("Actions", isCategory: true);
+        
         var metadata = new NodeLibraryItem("Metadata", isCategory: true);
         metadata.Children.Add(new NodeLibraryItem("Add Tag: AI", "AddTagAI"));
         metadata.Children.Add(new NodeLibraryItem("Set Subject: CS", "SetSubjectCS"));
-        metadata.Children.Add(new NodeLibraryItem("Auto-Tag (AI)", "AutoTag"));
+        metadata.Children.Add(new NodeLibraryItem("Auto-Tag Files", "AutoTag"));
         actions.Children.Add(metadata);
+        
         NodeLibraryTree.Add(actions);
 
-        // 4. Outputs
-        var outputs = new NodeLibraryItem("Outputs", isCategory: true);
-        outputs.Children.Add(new NodeLibraryItem("Export Dublin Core XML", "ExportDcXml"));
-        outputs.Children.Add(new NodeLibraryItem("Result Table", "Result"));
-        outputs.Children.Add(new NodeLibraryItem("Export CSV", "ExportCsv"));
-        outputs.Children.Add(new NodeLibraryItem("Export JSON", "ExportJson"));
-        NodeLibraryTree.Add(outputs);
-
-        // Relationship
+        // 4. Relationships
         var relationships = new NodeLibraryItem("Relationships", isCategory: true);
         relationships.Children.Add(new NodeLibraryItem("Link to Target", "CreateRelationship"));
         relationships.Children.Add(new NodeLibraryItem("Find Related", "FindRelated"));
         NodeLibraryTree.Add(relationships);
+
+        // 5. Outputs
+        var outputs = new NodeLibraryItem("Outputs", isCategory: true);
+        outputs.Children.Add(new NodeLibraryItem("Result Table", "Result"));
+        outputs.Children.Add(new NodeLibraryItem("Export CSV", "ExportCsv"));
+        outputs.Children.Add(new NodeLibraryItem("Export JSON", "ExportJson"));
+        outputs.Children.Add(new NodeLibraryItem("Export Dublin Core", "ExportDcXml"));
+        NodeLibraryTree.Add(outputs);
     }
 
 }

@@ -1,23 +1,19 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using ArchiveFlow.Application.Interfaces;
+using ArchiveFlow.Application.Nodes.Definitions;
 
-namespace ArchiveFlow.Infrastructure.Services;
+namespace ArchiveFlow.Application.Services;
 
 /// <summary>
-/// Global registry for all available node types, including built-in and plugin-provided nodes.
+/// Global registry for all available node definitions.
 /// </summary>
-public class LegacyPluginNodeRegistry
+public class NodeRegistry
 {
     private readonly Dictionary<string, NodeDefinition> _definitions = new();
 
     public void Register(NodeDefinition definition)
     {
-        if (!_definitions.ContainsKey(definition.NodeType))
-        {
-            _definitions[definition.NodeType] = definition;
-        }
+        _definitions[definition.NodeType] = definition;
     }
 
     public NodeDefinition? GetDefinition(string nodeType)
@@ -30,8 +26,13 @@ public class LegacyPluginNodeRegistry
         return _definitions.Values;
     }
 
+    public IEnumerable<NodeDefinition> GetByCategory(NodeCategory category)
+    {
+        return _definitions.Values.Where(d => d.Category == category);
+    }
+
     public IEnumerable<NodeDefinition> GetDefinitionsByCategory(string category)
     {
-        return _definitions.Values.Where(d => d.Category.Equals(category, StringComparison.OrdinalIgnoreCase));
+        return _definitions.Values.Where(d => d.Category.ToString().Equals(category, System.StringComparison.OrdinalIgnoreCase));
     }
 }

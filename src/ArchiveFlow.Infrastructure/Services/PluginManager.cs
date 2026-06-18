@@ -5,8 +5,10 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
 using ArchiveFlow.Application.Interfaces;
+using ArchiveFlow.Application.Nodes.Definitions;
 using ArchiveFlow.Application.Services;
 using Microsoft.Extensions.Logging;
+using NodeRegistry = ArchiveFlow.Application.Services.NodeRegistry;
 
 namespace ArchiveFlow.Infrastructure.Services;
 
@@ -76,7 +78,22 @@ public class PluginManager
                 
                 foreach (var definition in plugin.GetNodeDefinitions())
                 {
-                    _registry.Register(definition);
+                    _registry.Register(new ArchiveFlow.Application.Nodes.Definitions.NodeDefinition
+                    {
+                        NodeType = definition.NodeType,
+                        DisplayName = definition.DisplayName,
+                        Description = $"Plugin node from {plugin.PluginName}",
+                        Category = NodeCategory.Action,
+                        SubCategory = definition.Category,
+                        IsPreviewOnly = false,
+                        AccentColor = "#607D8B",
+                        Ports =
+                        {
+                            new PortDefinition { Name = "Input", DataType = PortDataType.FileSet, IsInput = true },
+                            new PortDefinition { Name = "Output", DataType = PortDataType.FileSet, IsInput = false }
+                        },
+                        Factory = _ => definition.Factory()
+                    });
                     _logger.LogDebug("Registered node type: {NodeType} from plugin {PluginName}", definition.NodeType, plugin.PluginName);
                 }
             }
