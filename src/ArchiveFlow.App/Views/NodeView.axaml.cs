@@ -20,10 +20,10 @@ public partial class NodeView : UserControl
         if (DataContext is NodeViewModel vm && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             var canvas = this.FindAncestor<NodeCanvasView>();
-            if (canvas != null)
-            {
-                canvas.StartNodeDrag(vm, canvas.GetCanvasPosition(e), e.Pointer);
-            }
+            if (canvas == null) return;
+
+            canvas.ViewModel?.SelectNode(vm);
+            canvas.StartNodeDrag(vm, canvas.GetCanvasPosition(e), e.Pointer);
             e.Handled = true;
         }
     }

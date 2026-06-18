@@ -24,7 +24,7 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         AvaloniaXamlLoader.Load(this);
     }
 
-    public override void OnFrameworkInitializationCompleted()
+    public async override void OnFrameworkInitializationCompleted()
     {
         // DB columns are snake_case (file_name, file_extension, ...) while entities are PascalCase.
         // Enable Dapper underscore matching so `SELECT *` maps correctly (otherwise FileName/FileExtension come back empty).
@@ -37,6 +37,10 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         var dbInitializer = Services.GetRequiredService<IDatabaseInitializer>();
         dbInitializer.Initialize();
 
+        // Initialize Mock Data if database is empty
+        var mockDataService = Services.GetRequiredService<ArchiveFlow.Application.Interfaces.IMockDataService>();
+        await mockDataService.GenerateMockDataAsync();
+        
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow
@@ -65,6 +69,7 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         services.AddSingleton<ArchiveFlow.Application.Interfaces.ISearchService, ArchiveFlow.Infrastructure.Search.SqliteSearchService>();
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IWorkflowStorageService, ArchiveFlow.Infrastructure.Storage.LocalWorkflowStorageService>();
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IFilePreviewService, ArchiveFlow.Infrastructure.Preview.FilePreviewService>();
+        services.AddSingleton<ArchiveFlow.Application.Interfaces.IMockDataService, ArchiveFlow.Infrastructure.Services.MockDataService>();
         
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb

@@ -4,7 +4,9 @@
              xmlns:views="using:ArchiveFlow.App.Views"
              xmlns:domain="using:ArchiveFlow.Domain.Entities"
              x:Class="ArchiveFlow.App.Views.NodeCanvasView"
-             x:DataType="vm:NodeCanvasViewModel">
+             x:DataType="vm:NodeCanvasViewModel"
+             Focusable="True"
+             KeyDown="UserControl_KeyDown">
 
     <Grid ColumnDefinitions="200,*,300">
         
@@ -20,6 +22,9 @@
                 <Button Content="Filter .txt" Command="{Binding AddFilterTxtCommand}" Margin="0,2"/>
                 <Button Content="Filter .md" Command="{Binding AddFilterMdCommand}" Margin="0,2"/>
                 
+                <TextBlock Text="Rules" Foreground="Gray" Margin="0,10,0,5"/>
+                <Button Content="Dynamic Rule" Command="{Binding AddDynamicRuleCommand}" Margin="0,2"/>
+
                 <TextBlock Text="Actions" Foreground="Gray" Margin="0,10,0,5"/>
                 <Button Content="Add Tag: AI" Command="{Binding AddTagAICommand}" Margin="0,2"/>
                 <Button Content="Set Subject: CS" Command="{Binding AddSubjectCSCommand}" Margin="0,2"/>

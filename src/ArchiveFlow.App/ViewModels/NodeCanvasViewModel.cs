@@ -38,7 +38,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     [ObservableProperty] private FileRecord? _selectedFile;
     [ObservableProperty] private Avalonia.Media.Imaging.Bitmap? _selectedFileThumbnail;
     [ObservableProperty] private string _selectedFilePreviewText = string.Empty;
-
+    [ObservableProperty] private NodeViewModel? _selectedNode;
     private PortViewModel? _connectingSourcePort;
 
     public NodeCanvasViewModel(
@@ -91,6 +91,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     [RelayCommand] private void AddFullTextSearch() => AddNodeInternal("Full Text Search", "FullTextSearch", 300, 440, "test");
     [RelayCommand] private void AddExportCsv() => AddNodeInternal("Export CSV", "ExportCsv", 520, 120, "output.csv");
     [RelayCommand] private void AddExportJson() => AddNodeInternal("Export JSON", "ExportJson", 520, 300, "output.json");
+    [RelayCommand] private void AddDynamicRule() => AddNodeInternal("Dynamic Rule", "DynamicRule", 400, 300, "type:.png");
 
     private void AddNodeInternal(string title, string type, double x, double y, string defaultParam = "")
     {
@@ -100,6 +101,35 @@ public partial class NodeCanvasViewModel : ObservableObject
         RecalculateLayout();
         ExecutionLog += $"Added: {title}\n";
         _logger.LogInformation("Added node: {Title}", title);
+    }
+
+    public void SelectNode(NodeViewModel? node)
+    {
+        // Deselect previous
+        if (SelectedNode != null) SelectedNode.IsSelected = false;
+        
+        SelectedNode = node;
+        if (SelectedNode != null) SelectedNode.IsSelected = true;
+    }
+
+    [RelayCommand]
+    private void DeleteSelectedNode()
+    {
+        if (SelectedNode == null) return;
+        var deletedTitle = SelectedNode.Title;
+
+        // Remove edges connected to this node
+        var edgesToRemove = Edges.Where(e => e.Source.ParentNode == SelectedNode || e.Target.ParentNode == SelectedNode).ToList();
+        foreach (var edge in edgesToRemove)
+        {
+            Edges.Remove(edge);
+        }
+
+        // Remove node
+        Nodes.Remove(SelectedNode);
+        SelectNode(null);
+        
+        ExecutionLog += $"Deleted node: {deletedTitle}\n";
     }
 
     // --- Connection & Drag ---
@@ -284,6 +314,7 @@ public partial class NodeCanvasViewModel : ObservableObject
             "FullTextSearch" => new FullTextSearchNode(_searchService, vm.ParameterValue),
             "ExportCsv" => new ExportCsvNode(vm.ParameterValue),
             "ExportJson" => new ExportJsonNode(vm.ParameterValue),
+            "DynamicRule" => new DynamicRuleNode(vm.ParameterValue),
             _ => throw new InvalidOperationException($"Unknown: {vm.NodeType}")
         };
     }

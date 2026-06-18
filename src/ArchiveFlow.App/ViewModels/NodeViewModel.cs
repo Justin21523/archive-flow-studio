@@ -25,9 +25,10 @@ public partial class NodeViewModel : ObservableObject
     // 新增：節點的參數 (例如搜尋關鍵字)
     [ObservableProperty] 
     private string _parameterValue = string.Empty;
+    [ObservableProperty] private bool _isSelected;
 
-    public PortViewModel InputPort { get; set;}
-    public PortViewModel OutputPort { get; set;}
+    public PortViewModel InputPort { get; private set; } = null!;
+    public PortViewModel OutputPort { get; private set; } = null!;
 
     // 預設建構子
     public NodeViewModel(string title, string nodeType, double x, double y, string defaultParam = "")

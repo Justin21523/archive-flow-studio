@@ -289,4 +289,19 @@ public partial class NodeCanvasView : UserControl
             ViewModel?.SelectFile(file);
         }
     }
+    private void UserControl_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Delete || e.Key == Key.Back)
+        {
+            _viewModel?.DeleteSelectedNodeCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    // 確保在 OnDataContextChanged 或初始化時，讓 UserControl 獲得焦點，以便接收鍵盤事件
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        this.Focus();
+    }
 }

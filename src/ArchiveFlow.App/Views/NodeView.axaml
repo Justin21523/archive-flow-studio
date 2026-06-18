@@ -1,13 +1,19 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ArchiveFlow.App.ViewModels"
+             xmlns:conv="using:ArchiveFlow.App.Converters"
              x:Class="ArchiveFlow.App.Views.NodeView"
              x:DataType="vm:NodeViewModel"
              Width="200" Height="130">
 
     <Grid>
-        <Border Background="#2D2D30" BorderBrush="#3F3F46" BorderThickness="2" CornerRadius="8"
-                Margin="10,0" BoxShadow="0 4 6 rgba(0,0,0,0.3)" PointerPressed="NodeBody_PointerPressed">
+        <Border Background="#2D2D30" 
+                BorderBrush="{Binding IsSelected, Converter={x:Static conv:BoolToBrushConverter.Instance}}" 
+                BorderThickness="2" 
+                CornerRadius="8"
+                Margin="10,0" 
+                BoxShadow="0 4 6 rgba(0,0,0,0.3)" 
+                PointerPressed="NodeBody_PointerPressed">
             <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="15,10">
                 <TextBlock Grid.Row="0" Text="{Binding Title}" FontWeight="Bold" Foreground="White" FontSize="14"/>
                 
