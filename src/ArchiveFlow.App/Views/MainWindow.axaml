@@ -36,7 +36,7 @@
 
         <!-- Main Content Area with Tabs -->
         <TabControl x:Name="MainTabControl" Background="#1E1E1E">
-            <TabItem Header="Dashboard" IsSelected="True">
+            <TabItem Header="Dashboard" IsSelected="True" x:Name="DashboardTab">
                 <views:DashboardView/>
             </TabItem>
             <TabItem Header="Workspace">

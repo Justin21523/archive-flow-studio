@@ -233,7 +233,47 @@
                                 </StackPanel>
                             </StackPanel>
                         </Border>
-
+                        <!-- Query/Action Preview Panel -->
+                        <Border IsVisible="{Binding SelectedNode, Converter={x:Static ObjectConverters.IsNotNull}}" 
+                            Background="#1E1E1E" CornerRadius="6" Margin="0,0,0,15">
+                            <StackPanel Margin="15">
+                                <TextBlock Text="Preview" 
+                                        FontWeight="Bold" 
+                                        Foreground="White" 
+                                        FontSize="14"
+                                        Margin="0,0,0,10"/>
+                                
+                                <!-- Query Node Preview (SQL/Logic) -->
+                                <Border IsVisible="{Binding SelectedNode.IsPreviewOnly}" 
+                                    Background="#2D2D30" CornerRadius="4" Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Text="Query Logic:" 
+                                                Foreground="#007ACC" 
+                                                FontSize="11"
+                                                Margin="0,0,0,5"/>
+                                        <TextBlock Text="{Binding SelectedNode.QueryPreview}" 
+                                                Foreground="#CCC" 
+                                                FontFamily="Consolas, monospace"
+                                                FontSize="11"
+                                                TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                                <!-- Action Node Preview (Changes) -->
+                                <Border IsVisible="{Binding SelectedNode.IsPreviewOnly, Converter={x:Static converters:BoolToBoolConverter.Instance}, ConverterParameter=inverse}" 
+                                    Background="#2D2D30" CornerRadius="4" Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Text="Will Modify:" 
+                                                Foreground="#FF9800" 
+                                                FontSize="11"
+                                                Margin="0,0,0,5"/>
+                                        <TextBlock Text="{Binding SelectedNode.ActionPreview}" 
+                                                Foreground="#CCC" 
+                                                FontSize="11"
+                                                TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
                         <!-- File Inspector Panel -->
                         <Border Background="#1E1E1E" CornerRadius="6" Margin="0,0,0,15">
                             <ScrollViewer>

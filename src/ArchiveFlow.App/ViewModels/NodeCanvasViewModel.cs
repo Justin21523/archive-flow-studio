@@ -434,9 +434,13 @@ public partial class NodeCanvasViewModel : ObservableObject
     {
         var x = Math.Max(0, CanvasViewportCenterX - NodeDefaultWidth / 2);
         var y = Math.Max(0, CanvasViewportCenterY - NodeDefaultHeight / 2);
-        var newNode = new NodeViewModel(title, type, x, y, defaultParam);
+        AddNodeInternal(title, type, x, y, defaultParam);
+    }
 
-        newNode.AddTextParam("General Parameter", defaultParam);
+    private void AddNodeInternal(string title, string type, double x, double y, string defaultParam = "")
+    {
+        double offsetX = (Nodes.Count % 5) * 30;
+        var newNode = new NodeViewModel(title, type, x + offsetX, y, defaultParam);
 
         // Initialize parameters based on node type
         switch (type)
@@ -473,6 +477,9 @@ public partial class NodeCanvasViewModel : ObservableObject
                 newNode.AddTextParam("General Parameter", defaultParam);
                 break;
         }
+
+        // Subscribe to parameter changes for preview updates
+        SubscribeToParameterChanges(newNode);
 
         Nodes.Add(newNode);
         RecalculateLayout();
@@ -627,7 +634,7 @@ public partial class NodeCanvasViewModel : ObservableObject
             });
         }
     }            
-    
+
     // --- Execution ---
     [RelayCommand]
     private async Task ExecuteWorkflowAsync()
@@ -814,7 +821,23 @@ public partial class NodeCanvasViewModel : ObservableObject
         outputs.Children.Add(new NodeLibraryItem("Export Dublin Core", "ExportDcXml"));
         NodeLibraryTree.Add(outputs);
     }
-
+    private void SubscribeToParameterChanges(NodeViewModel node)
+    {
+        foreach (var param in node.Parameters)
+        {
+            param.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(NodeParameterViewModel.Value))
+                {
+                    // Update node preview when parameter changes
+                    node.GetType().GetMethod("UpdatePreview", 
+                        System.Reflection.BindingFlags.NonPublic | 
+                        System.Reflection.BindingFlags.Instance)?
+                        .Invoke(node, null);
+                }
+            };
+        }
+    }
 }
 
 public class PassThroughNode : IArchiveNode

@@ -9,11 +9,20 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        // Find the Database Manager TabItem and set its DataContext
+        
+        // Set DataContext for Dashboard
+        if (this.FindControl<TabItem>("DashboardTab") is TabItem dashboardTab)
+        {
+            dashboardTab.DataContext = App.Services.GetService<ArchiveFlow.App.ViewModels.DashboardViewModel>();
+        }
+
+        // Set DataContext for Database Manager (if exists)
         if (this.FindControl<TabItem>("DbManagerTab") is TabItem dbTab)
         {
             dbTab.DataContext = App.Services.GetService<ArchiveFlow.App.ViewModels.DatabaseManagerViewModel>();
         }
+
+        // Set DataContext for Graph Explorer (if exists)
         if (this.FindControl<TabItem>("GraphExplorerTab") is TabItem graphTab)
         {
             graphTab.DataContext = App.Services.GetService<ArchiveFlow.App.ViewModels.GraphExplorerViewModel>();

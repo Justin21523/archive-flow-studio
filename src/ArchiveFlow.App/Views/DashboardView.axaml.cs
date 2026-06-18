@@ -11,17 +11,29 @@ public partial class DashboardView : UserControl
     {
         InitializeComponent();
         
-        // Attach click event to the Generate Data card
+        // Attach click events to cards
+        if (this.FindControl<Border>("WorkspaceCard") is Border workspaceCard)
+        {
+            workspaceCard.PointerPressed += (s, e) => 
+            {
+                // Navigate to Workspace tab (handled by MainWindow logic usually, but here we can trigger it)
+                // For simplicity, we rely on the TabControl in MainWindow
+            };
+        }
+
         if (this.FindControl<Border>("GenerateDataCard") is Border generateCard)
         {
             generateCard.PointerPressed += async (s, e) =>
             {
-                // Resolve service from DI
                 var mockService = App.Services.GetService<IMockDataService>();
                 if (mockService != null)
                 {
                     await mockService.GenerateMockDataAsync();
-                    // Optional: Show a message or refresh UI
+                    // Refresh statistics after generation
+                    if (DataContext is ViewModels.DashboardViewModel vm)
+                    {
+                        await vm.LoadStatisticsCommand.ExecuteAsync(null);
+                    }
                 }
             };
         }

@@ -1,19 +1,77 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="ArchiveFlow.App.Views.DashboardView">
+             xmlns:vm="using:ArchiveFlow.App.ViewModels"
+             xmlns:dto="using:ArchiveFlow.Application.DTOs"
+             xmlns:conv="using:ArchiveFlow.App.Converters"
+             x:Class="ArchiveFlow.App.Views.DashboardView"
+             x:DataType="vm:DashboardViewModel">
     
     <ScrollViewer Background="#1E1E1E">
         <StackPanel Margin="40">
             <TextBlock Text="ArchiveFlow Studio" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,0,10"/>
             <TextBlock Text="Node-based Personal Digital Archive &amp; Metadata Workflow System" FontSize="16" Foreground="Gray" Margin="0,0,0,40"/>
 
-            <TextBlock Text="Quick Access" FontSize="20" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,20"/>
+            <!-- Archive Health Statistics -->
+            <TextBlock Text="Archive Health" FontSize="20" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,20"/>
+            
+            <WrapPanel Margin="0,0,0,30">
+                <!-- Total Files Card -->
+                <Border Width="250" Height="120" Background="#2D2D30" CornerRadius="8" Margin="0,0,20,20" BoxShadow="0 4 6 rgba(0,0,0,0.3)">
+                    <StackPanel Margin="20" VerticalAlignment="Center">
+                        <TextBlock Text="Total Files" Foreground="Gray" FontSize="14"/>
+                        <TextBlock Text="{Binding TotalFiles}" Foreground="White" FontSize="32" FontWeight="Bold"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Total Size Card -->
+                <Border Width="250" Height="120" Background="#2D2D30" CornerRadius="8" Margin="0,0,20,20" BoxShadow="0 4 6 rgba(0,0,0,0.3)">
+                    <StackPanel Margin="20" VerticalAlignment="Center">
+                        <TextBlock Text="Storage Used" Foreground="Gray" FontSize="14"/>
+                        <TextBlock Text="{Binding TotalSize}" Foreground="White" FontSize="32" FontWeight="Bold"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Metadata Completeness Card -->
+                <Border Width="250" Height="120" Background="#2D2D30" CornerRadius="8" Margin="0,0,20,20" BoxShadow="0 4 6 rgba(0,0,0,0.3)">
+                    <StackPanel Margin="20" VerticalAlignment="Center">
+                        <TextBlock Text="Metadata Completeness" Foreground="Gray" FontSize="14"/>
+                        <Grid ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0" Text="{Binding MetadataCompleteness, StringFormat='{}{0:F0}%'}" Foreground="#007ACC" FontSize="32" FontWeight="Bold"/>
+                            <TextBlock Grid.Column="1" Text="Indexed" Foreground="Gray" FontSize="14" VerticalAlignment="Bottom" Margin="5,0,0,5"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
+
+            <!-- File Type Distribution Chart -->
+            <TextBlock Text="File Type Distribution" FontSize="20" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,20"/>
+            
+            <Border Background="#2D2D30" CornerRadius="8" Padding="20" MaxWidth="600" HorizontalAlignment="Left">
+                <ItemsControl ItemsSource="{Binding FileTypeBars}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="dto:FileTypeBar">
+                            <Grid RowDefinitions="Auto,Auto" Margin="0,8">
+                                <TextBlock Grid.Row="0" Text="{Binding Extension}" Foreground="White" FontSize="12" FontWeight="Bold"/>
+                                <Border Grid.Row="1" Height="20" Background="#1E1E1E" CornerRadius="4" Margin="0,5,0,0">
+                                    <Border Width="{Binding WidthPercentage, Converter={x:Static conv:PercentageToWidthConverter.Instance}}" 
+                                            Background="#007ACC" CornerRadius="4" HorizontalAlignment="Left">
+                                        <TextBlock Text="{Binding Count}" Foreground="White" FontSize="10" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                    </Border>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+            <TextBlock Text="{Binding StatusMessage}" Foreground="Gray" Margin="0,30,0,0" FontSize="12"/>
+
+            <!-- Quick Access -->
+            <TextBlock Text="Quick Access" FontSize="20" FontWeight="SemiBold" Foreground="White" Margin="0,40,0,20"/>
             
             <WrapPanel>
-                <!-- Workspace Card -->
                 <Border Width="250" Height="150" Background="#2D2D30" CornerRadius="8" Margin="0,0,20,20" 
-                        BoxShadow="0 4 6 rgba(0,0,0,0.3)" Cursor="Hand"
-                        Tag="Workspace">
+                        BoxShadow="0 4 6 rgba(0,0,0,0.3)" Cursor="Hand" Tag="Workspace" Name="WorkspaceCard">
                     <Grid Margin="20">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
@@ -27,20 +85,8 @@
                     </Grid>
                 </Border>
 
-                <!-- Placeholder Cards -->
-                <Border Width="250" Height="150" Background="#2D2D30" CornerRadius="8" Margin="0,0,20,20" Opacity="0.5">
-                    <Grid Margin="20">
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Metadata Catalog" FontSize="18" FontWeight="Bold" Foreground="White"/>
-                            <TextBlock Text="Manage tags, subjects, and fields" FontSize="12" Foreground="Gray"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-                
-                <!-- Generate Mock Data Button -->
                 <Border Width="250" Height="150" Background="#2D2D30" CornerRadius="8" Margin="0,0,20,20" 
-                        BoxShadow="0 4 6 rgba(0,0,0,0.3)" Cursor="Hand"
-                        Tag="GenerateData" x:Name="GenerateDataCard">
+                        BoxShadow="0 4 6 rgba(0,0,0,0.3)" Cursor="Hand" Tag="GenerateData" Name="GenerateDataCard">
                     <Grid Margin="20">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
@@ -48,7 +94,7 @@
                         </Grid.RowDefinitions>
                         <Path Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" Fill="#FFA500" Width="40" Height="40" HorizontalAlignment="Left" VerticalAlignment="Top"/>
                         <StackPanel Grid.Row="1">
-                            <TextBlock Text="Generate Massive Mock Data" FontSize="18" FontWeight="Bold" Foreground="White"/>
+                            <TextBlock Text="Generate Mock Data" FontSize="18" FontWeight="Bold" Foreground="White"/>
                             <TextBlock Text="Create 200+ realistic files for testing" FontSize="12" Foreground="Gray" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Grid>

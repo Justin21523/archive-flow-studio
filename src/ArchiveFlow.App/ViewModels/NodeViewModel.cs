@@ -23,6 +23,11 @@ public partial class NodeViewModel : ObservableObject
     [ObservableProperty] private string _status = "Idle";
     [ObservableProperty] private bool _isSelected;
 
+    // Preview properties for Query/Action nodes
+    [ObservableProperty] private string _queryPreview = string.Empty;
+    [ObservableProperty] private string _actionPreview = string.Empty;
+
+
     // UI-friendly properties derived from Definition
     public string Title => Definition.DisplayName;
     public string NodeType => Definition.NodeType;
@@ -109,6 +114,45 @@ public partial class NodeViewModel : ObservableObject
     {
         return Parameters.FirstOrDefault(p => p.Key == key)?.Value ?? string.Empty;
     }
+    // Update preview based on node type and parameters
+    private void UpdatePreview()
+    {
+        if (IsPreviewOnly)
+        {
+            UpdateQueryPreview();
+        }
+        else
+        {
+            UpdateActionPreview();
+        }
+    }
+     private void UpdateQueryPreview()
+    {
+        QueryPreview = NodeType switch
+        {
+            "AllFiles" => "SELECT * FROM files",
+            "FilterTxt" => "SELECT * FROM files WHERE extension = '.txt'",
+            "FilterMd" => "SELECT * FROM files WHERE extension = '.md'",
+            "FullTextSearch" => $"SELECT * FROM files_fts WHERE content MATCH '{ParameterValue}'",
+            "DynamicRule" => $"FILTER: {ParameterValue}",
+            "ConditionBranch" => $"WHERE {ParameterValue}",
+            _ => "Query logic will be displayed here"
+        };
+    }   
+    private void UpdateActionPreview()
+    {
+        ActionPreview = NodeType switch
+        {
+            "AddTagAI" => $"Add tag 'AI' to all files in input set",
+            "SetSubjectCS" => $"Set subject to 'Computer Science' for all files",
+            "AutoTag" => "Automatically analyze and tag files based on content",
+            "CreateRelationship" => $"Create relationship links to target file",
+            "ExportCsv" => $"Export to CSV file: {ParameterValue}",
+            "ExportJson" => $"Export to JSON file: {ParameterValue}",
+            "ExportDcXml" => $"Export to Dublin Core XML: {ParameterValue}",
+            _ => "Action will modify metadata or files"
+        };
+    }
 
     private static NodeDefinition CreateDefinition(string title, string nodeType)
     {
@@ -148,7 +192,6 @@ public partial class NodeViewModel : ObservableObject
         };
     }
 }
-
 
 /// <summary>
 /// Represents a visual port on the node card.
