@@ -11,6 +11,7 @@ using ArchiveFlow.Application.Nodes.Query;
 using ArchiveFlow.Application.Nodes.Actions;
 using ArchiveFlow.Domain.Entities;
 using ArchiveFlow.Application.DTOs;
+using ArchiveFlow.Application.Services;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -29,11 +30,14 @@ public partial class NodeCanvasViewModel : ObservableObject
     private readonly IFilePreviewService _previewService;
     private readonly IAutoTaggingService _autoTaggingService;
     private readonly IBatchJobService _batchJobService;
+    private readonly NodeRegistry _nodeRegistry;
+    public ObservableCollection<NodeLibraryItem> NodeLibraryTree { get; } = new();
 
     public ObservableCollection<NodeViewModel> Nodes { get; } = new();
     public ObservableCollection<EdgeViewModel> Edges { get; } = new();
     public ObservableCollection<FileRecord> ResultFiles { get; } = new();
     public ObservableCollection<MetadataValue> SelectedFileMetadata { get; } = new();
+    public ObservableCollection<NodeDefinition> PluginNodeDefinitions { get; } = new();
 
     [ObservableProperty] private string _executionLog = "Ready. Click buttons to add nodes.";
     [ObservableProperty] private string _tempEdgePath = string.Empty;
@@ -58,6 +62,7 @@ public partial class NodeCanvasViewModel : ObservableObject
         IFilePreviewService previewService,
         IAutoTaggingService autoTaggingService,
         IBatchJobService batchJobService,
+        NodeRegistry nodeRegistry,
         ILogger<NodeCanvasViewModel> logger)
     {
         _fileRepository = fileRepository;
@@ -67,10 +72,30 @@ public partial class NodeCanvasViewModel : ObservableObject
         _previewService = previewService;
         _autoTaggingService = autoTaggingService;
         _batchJobService = batchJobService;
+        _nodeRegistry = nodeRegistry;
         _logger = logger;
         
         InitializeDefaultNodes();
+        LoadPluginNodes();
         SubscribeToBatchJobEvents();
+    }
+
+    // 載入插件節點到 UI 集合
+    private void LoadPluginNodes()
+    {
+        var pluginNodes = _nodeRegistry.GetDefinitionsByCategory("Plugins");
+        foreach (var def in pluginNodes)
+        {
+            PluginNodeDefinitions.Add(def);
+        }
+    }
+
+    // 新增 Command 用於動態新增插件節點
+    [RelayCommand]
+    private void AddPluginNode(NodeDefinition definition)
+    {
+        if (definition == null) return;
+        AddNodeInternal(definition.DisplayName, definition.NodeType);
     }
 
     // 4. 新增訂閱背景任務事件的方法
@@ -171,7 +196,8 @@ public partial class NodeCanvasViewModel : ObservableObject
     // --- Update the CreateBackendNode method to include new cases ---
     private IArchiveNode CreateBackendNode(NodeViewModel vm)
     {
-        return vm.NodeType switch
+        // 1. Check built-in nodes first
+        var builtInNode = vm.NodeType switch
         {
             "AllFiles" => new AllFilesNode(_fileRepository, _searchService, _previewService),
             "FilterTxt" => new FileTypeFilterNode(".txt"),
@@ -183,12 +209,35 @@ public partial class NodeCanvasViewModel : ObservableObject
             "ExportCsv" => new ExportCsvNode(vm.ParameterValue),
             "ExportJson" => new ExportJsonNode(vm.ParameterValue),
             "DynamicRule" => new DynamicRuleNode(vm.ParameterValue),
-            // New DAG & AI Nodes
             "AutoTag" => new AutoTagNode(_autoTaggingService),
             "ConditionBranch" => new ConditionBranchNode(vm.ParameterValue),
             "MergeBranches" => new MergeBranchesNode(),
-            _ => throw new InvalidOperationException($"Unknown node type: {vm.NodeType}")
+            _ => (IArchiveNode?)null
         };
+
+        if (builtInNode != null) return builtInNode;
+
+        // 2. Fallback to Plugin Registry for dynamically loaded nodes
+        if (_nodeRegistry != null)
+        {
+            var definition = _nodeRegistry.GetDefinition(vm.NodeType);
+            if (definition != null)
+            {
+                // Create instance using the plugin's factory method
+                var pluginNode = definition.Factory();
+                
+                // Set position and display name to match the UI node
+                pluginNode.X = vm.X;
+                pluginNode.Y = vm.Y;
+                // Note: DisplayName is usually read-only in the interface, but if your implementation allows setting, do it here.
+                
+                return pluginNode;
+            }
+        }
+
+        // 3. If still not found, throw an exception (or return a dummy error node)
+        _logger.LogWarning("Unknown node type encountered during execution: {NodeType}", vm.NodeType);
+        throw new InvalidOperationException($"Unknown or unregistered node type: {vm.NodeType}");
     }
 
     public void UpdateCanvasViewportCenter(double centerX, double centerY)
@@ -202,6 +251,30 @@ public partial class NodeCanvasViewModel : ObservableObject
         var x = Math.Max(0, CanvasViewportCenterX - NodeDefaultWidth / 2);
         var y = Math.Max(0, CanvasViewportCenterY - NodeDefaultHeight / 2);
         var newNode = new NodeViewModel(title, type, x, y, defaultParam);
+
+        // Initialize specific parameters based on node type
+        switch (type)
+        {
+            case "FilterTxt":
+            case "FilterMd":
+                newNode.AddDropdownParam("Extension", ".txt", ".md", ".csv", ".json");
+                break;
+            case "FullTextSearch":
+                newNode.AddTextParam("Keyword", "search term");
+                newNode.AddDropdownParam("Mode", "Exact", "Fuzzy", "Regex");
+                break;
+            case "ConditionBranch":
+                newNode.AddDropdownParam("Field", "size", "extension", "name", "status");
+                newNode.AddDropdownParam("Operator", ">", "<", "==", "contains");
+                newNode.AddTextParam("Value", "0");
+                break;
+            case "ExportCsv":
+            case "ExportJson":
+                newNode.AddTextParam("Filename", "output");
+                newNode.AddDropdownParam("Encoding", "UTF-8", "ASCII");
+                break;
+        }
+
         Nodes.Add(newNode);
         SelectNode(newNode);
         RecalculateLayout();
@@ -486,6 +559,51 @@ public partial class NodeCanvasViewModel : ObservableObject
             ExecutionLog += $"Error loading workflow: {ex.Message}\n";
         }
     }
+
+    private void InitializeNodeLibraryTree()
+    {
+        NodeLibraryTree.Clear();
+
+        // 1. Sources
+        var sources = new NodeLibraryItem("Sources", isCategory: true);
+        sources.Children.Add(new NodeLibraryItem("All Files", "AllFiles"));
+        sources.Children.Add(new NodeLibraryItem("Folder Scanner", "FolderScanner")); // Placeholder
+        NodeLibraryTree.Add(sources);
+
+        // 2. Processors (Query/Filter)
+        var processors = new NodeLibraryItem("Processors", isCategory: true);
+        var filters = new NodeLibraryItem("Filters", isCategory: true);
+        filters.Children.Add(new NodeLibraryItem("File Type (.txt)", "FilterTxt"));
+        filters.Children.Add(new NodeLibraryItem("File Type (.md)", "FilterMd"));
+        filters.Children.Add(new NodeLibraryItem("Dynamic Rule", "DynamicRule"));
+        processors.Children.Add(filters);
+
+        var search = new NodeLibraryItem("Search", isCategory: true);
+        search.Children.Add(new NodeLibraryItem("Full Text Search", "FullTextSearch"));
+        processors.Children.Add(search);
+
+        var dag = new NodeLibraryItem("DAG Logic", isCategory: true);
+        dag.Children.Add(new NodeLibraryItem("Condition Branch", "ConditionBranch"));
+        dag.Children.Add(new NodeLibraryItem("Merge Branches", "MergeBranches"));
+        processors.Children.Add(dag);
+        NodeLibraryTree.Add(processors);
+        // 3. Actions (Metadata/Modify)
+        var actions = new NodeLibraryItem("Actions", isCategory: true);
+        var metadata = new NodeLibraryItem("Metadata", isCategory: true);
+        metadata.Children.Add(new NodeLibraryItem("Add Tag: AI", "AddTagAI"));
+        metadata.Children.Add(new NodeLibraryItem("Set Subject: CS", "SetSubjectCS"));
+        metadata.Children.Add(new NodeLibraryItem("Auto-Tag (AI)", "AutoTag"));
+        actions.Children.Add(metadata);
+        NodeLibraryTree.Add(actions);
+
+        // 4. Outputs
+        var outputs = new NodeLibraryItem("Outputs", isCategory: true);
+        outputs.Children.Add(new NodeLibraryItem("Result Table", "Result"));
+        outputs.Children.Add(new NodeLibraryItem("Export CSV", "ExportCsv"));
+        outputs.Children.Add(new NodeLibraryItem("Export JSON", "ExportJson"));
+        NodeLibraryTree.Add(outputs);
+    }
+
 }
 
 public class PassThroughNode : IArchiveNode

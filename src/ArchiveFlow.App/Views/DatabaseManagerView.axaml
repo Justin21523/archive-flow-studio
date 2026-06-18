@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:ArchiveFlow.App.ViewModels"
+             x:Class="ArchiveFlow.App.Views.DatabaseManagerView"
+             x:DataType="vm:DatabaseManagerViewModel">
+    
+    <ScrollViewer Background="#1E1E1E">
+        <StackPanel Margin="40">
+            <TextBlock Text="Database Management" FontSize="32" FontWeight="Bold" Foreground="White" Margin="0,0,0,20"/>
+            
+            <!-- Statistics Cards -->
+            <WrapPanel Margin="0,0,0,30">
+                <Border Width="200" Height="100" Background="#2D2D30" CornerRadius="8" Margin="0,0,20,20">
+                    <StackPanel Margin="20" VerticalAlignment="Center">
+                        <TextBlock Text="Total Files" Foreground="Gray" FontSize="14"/>
+                        <TextBlock Text="{Binding TotalFiles}" Foreground="White" FontSize="24" FontWeight="Bold"/>
+                    </StackPanel>
+                </Border>
+                <Border Width="200" Height="100" Background="#2D2D30" CornerRadius="8" Margin="0,0,20,20">
+                    <StackPanel Margin="20" VerticalAlignment="Center">
+                        <TextBlock Text="Total Size" Foreground="Gray" FontSize="14"/>
+                        <TextBlock Text="{Binding TotalSize}" Foreground="White" FontSize="24" FontWeight="Bold"/>
+                    </StackPanel>
+                </Border>
+                <Border Width="200" Height="100" Background="#2D2D30" CornerRadius="8" Margin="0,0,20,20">
+                    <StackPanel Margin="20" VerticalAlignment="Center">
+                        <TextBlock Text="Metadata Entries" Foreground="Gray" FontSize="14"/>
+                        <TextBlock Text="{Binding TotalMetadata}" Foreground="White" FontSize="24" FontWeight="Bold"/>
+                    </StackPanel>
+                </Border>
+            </WrapPanel>
+
+            <!-- Actions -->
+            <TextBlock Text="Maintenance Actions" FontSize="20" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,15"/>
+            <StackPanel Spacing="10" MaxWidth="400" HorizontalAlignment="Left">
+                <Button Content="Refresh Statistics" Command="{Binding RefreshStatsCommand}" Classes="accent" HorizontalAlignment="Stretch"/>
+                <Button Content="Rebuild Full-Text Search Index" Command="{Binding RebuildIndexCommand}" HorizontalAlignment="Stretch"/>
+                <Button Content="Clear All Metadata" Command="{Binding ClearMetadataCommand}" HorizontalAlignment="Stretch"/>
+                <Button Content="Delete All Files (Danger)" Command="{Binding DeleteAllCommand}" HorizontalAlignment="Stretch" Foreground="Red"/>
+            </StackPanel>
+
+            <TextBlock Text="{Binding StatusMessage}" Foreground="Gray" Margin="0,20,0,0"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

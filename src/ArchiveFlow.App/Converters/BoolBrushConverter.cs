@@ -26,3 +26,18 @@ public class BoolToBrushConverter : IValueConverter
         throw new NotImplementedException();
     }
 }
+
+public class IsEqualConverter : IValueConverter
+{
+    public static IsEqualConverter Instance { get; } = new();
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        return string.Equals(value?.ToString(), parameter?.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}

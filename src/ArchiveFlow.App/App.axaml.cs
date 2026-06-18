@@ -37,6 +37,8 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         var dbInitializer = Services.GetRequiredService<IDatabaseInitializer>();
         dbInitializer.Initialize();
 
+        var pluginManager = Services.GetRequiredService<ArchiveFlow.Infrastructure.Services.PluginManager>();
+        pluginManager.LoadPlugins();
         // Initialize Mock Data if database is empty
         var mockDataService = Services.GetRequiredService<ArchiveFlow.Application.Interfaces.IMockDataService>();
         await mockDataService.GenerateMockDataAsync();
@@ -73,7 +75,10 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IAutoTaggingService, ArchiveFlow.Infrastructure.Services.LocalKeywordTaggingService>();
         // Register the background batch job service as a singleton
         services.AddSingleton<ArchiveFlow.Application.Interfaces.IBatchJobService, ArchiveFlow.Infrastructure.Services.BackgroundBatchJobService>();
-
+        services.AddSingleton<ArchiveFlow.Application.Services.NodeRegistry>();
+        services.AddSingleton<ArchiveFlow.Infrastructure.Services.PluginManager>();
+        services.AddTransient<ArchiveFlow.App.ViewModels.DatabaseManagerViewModel>();
+        
         services.AddFluentMigratorCore()
             .ConfigureRunner(rb => rb
                 .AddSQLite()

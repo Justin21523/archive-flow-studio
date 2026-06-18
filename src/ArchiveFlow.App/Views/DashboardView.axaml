@@ -36,6 +36,23 @@
                         </StackPanel>
                     </Grid>
                 </Border>
+                
+                <!-- Generate Mock Data Button -->
+                <Border Width="250" Height="150" Background="#2D2D30" CornerRadius="8" Margin="0,0,20,20" 
+                        BoxShadow="0 4 6 rgba(0,0,0,0.3)" Cursor="Hand"
+                        Tag="GenerateData" x:Name="GenerateDataCard">
+                    <Grid Margin="20">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Path Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" Fill="#FFA500" Width="40" Height="40" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                        <StackPanel Grid.Row="1">
+                            <TextBlock Text="Generate Massive Mock Data" FontSize="18" FontWeight="Bold" Foreground="White"/>
+                            <TextBlock Text="Create 200+ realistic files for testing" FontSize="12" Foreground="Gray" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
             </WrapPanel>
         </StackPanel>
     </ScrollViewer>

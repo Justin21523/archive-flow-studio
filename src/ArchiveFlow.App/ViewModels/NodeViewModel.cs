@@ -1,4 +1,5 @@
 using System;
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ArchiveFlow.App.ViewModels;
@@ -29,6 +30,7 @@ public partial class NodeViewModel : ObservableObject
 
     public PortViewModel InputPort { get; private set; } = null!;
     public PortViewModel OutputPort { get; private set; } = null!;
+    public ObservableCollection<NodeParameterViewModel> Parameters { get; } = new();
 
     // 預設建構子
     public NodeViewModel(string title, string nodeType, double x, double y, string defaultParam = "")
@@ -52,6 +54,15 @@ public partial class NodeViewModel : ObservableObject
         ParameterValue = defaultParam;
         InputPort = new PortViewModel(this, true, 0, 50);
         OutputPort = new PortViewModel(this, false, 200, 50);
+    }
+    public void AddTextParam(string label, string defaultValue = "") => 
+        Parameters.Add(new NodeParameterViewModel(label, "Text", defaultValue));
+    public void AddDropdownParam(string label, params string[] options)
+    {
+        var p = new NodeParameterViewModel(label, "Dropdown");
+        foreach(var opt in options) p.Options.Add(opt);
+        if(options.Length > 0) p.Value = options[0];
+        Parameters.Add(p);
     }
 }
 

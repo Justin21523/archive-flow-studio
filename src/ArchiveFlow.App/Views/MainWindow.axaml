@@ -42,6 +42,10 @@
             <TabItem Header="Workspace">
                 <views:NodeCanvasView/>
             </TabItem>
+            <!-- 新增 Database Manager Tab -->
+            <TabItem Header="Database Manager">
+                <views:DatabaseManagerView DataContext="{DynamicResource DatabaseManagerViewModel}"/>
+            </TabItem>
         </TabControl>
     </DockPanel>
 </Window>

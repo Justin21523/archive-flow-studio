@@ -50,6 +50,16 @@ public class FileRecord
         Status = (int)newStatus;
     }
 
+    public void UpdateFileSize(long fileSize)
+    {
+        if (fileSize < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(fileSize), "File size cannot be negative.");
+        }
+
+        FileSize = fileSize;
+    }
+
     public FileStatus GetStatus()
     {
         return (FileStatus)Status;

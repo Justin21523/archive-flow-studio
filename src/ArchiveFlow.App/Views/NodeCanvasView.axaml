@@ -2,6 +2,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ArchiveFlow.App.ViewModels"
              xmlns:domain="using:ArchiveFlow.Domain.Entities"
+             xmlns:app="using:ArchiveFlow.Application.Interfaces"
+             xmlns:conv="using:ArchiveFlow.App.Converters"
              x:Class="ArchiveFlow.App.Views.NodeCanvasView"
              x:DataType="vm:NodeCanvasViewModel"
              Focusable="True"
@@ -28,61 +30,22 @@
         </Border>
 
         <Grid ColumnDefinitions="220,*,300" DockPanel.Dock="Top">
+            <!-- Left: Hierarchical Node Library -->
             <Border Grid.Column="0" Background="#252526" Margin="0,0,5,0">
-                <ScrollViewer>
-                    <StackPanel Margin="10">
-                        <TextBlock Text="Node Library" FontWeight="Bold" Foreground="White" Margin="0,0,0,10"/>
-
-                        <Expander Header="Sources" IsExpanded="True" Margin="0,2">
-                            <StackPanel Margin="10,5">
-                                <Button Content="All Files" Command="{Binding AddAllFilesCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                            </StackPanel>
-                        </Expander>
-
-                        <Expander Header="Filters &amp; Rules" IsExpanded="True" Margin="0,2">
-                            <StackPanel Margin="10,5">
-                                <Button Content="Filter .txt" Command="{Binding AddFilterTxtCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                                <Button Content="Filter .md" Command="{Binding AddFilterMdCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                                <Button Content="Dynamic Rule" Command="{Binding AddDynamicRuleCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                            </StackPanel>
-                        </Expander>
-
-                        <Expander Header="Actions (Metadata)" IsExpanded="True" Margin="0,2">
-                            <StackPanel Margin="10,5">
-                                <Button Content="Add Tag: AI" Command="{Binding AddTagAICommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                                <Button Content="Set Subject: CS" Command="{Binding AddSubjectCSCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                                <Button Content="Auto-Tag Files" Command="{Binding AddAutoTagCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                            </StackPanel>
-                        </Expander>
-
-                        <Expander Header="Search &amp; Export" IsExpanded="True" Margin="0,2">
-                            <StackPanel Margin="10,5">
-                                <Button Content="Full Text Search" Command="{Binding AddFullTextSearchCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                                <Button Content="Export CSV" Command="{Binding AddExportCsvCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                                <Button Content="Export JSON" Command="{Binding AddExportJsonCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                            </StackPanel>
-                        </Expander>
-
-                        <Expander Header="DAG Logic" IsExpanded="True" Margin="0,2">
-                            <StackPanel Margin="10,5">
-                                <Button Content="Condition Branch" Command="{Binding AddConditionBranchCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                                <Button Content="Merge Branches" Command="{Binding AddMergeBranchesCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                            </StackPanel>
-                        </Expander>
-
-                        <Expander Header="Outputs" IsExpanded="True" Margin="0,2">
-                            <StackPanel Margin="10,5">
-                                <Button Content="Result Table" Command="{Binding AddResultTableCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                            </StackPanel>
-                        </Expander>
-
-                        <Border Height="1" Background="Gray" Margin="0,15"/>
-
-                        <Button Content="Execute Workflow (F5)" Command="{Binding ExecuteWorkflowCommand}" Classes="accent" Margin="0,5" HorizontalAlignment="Stretch"/>
-                        <Button Content="Save Workflow" Command="{Binding SaveWorkflowCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                        <Button Content="Load Workflow" Command="{Binding LoadWorkflowCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
-                    </StackPanel>
-                </ScrollViewer>
+                <Grid RowDefinitions="Auto,*">
+                    <TextBlock Text="Node Library" FontWeight="Bold" Foreground="White" Margin="10,10,10,5"/>
+                    
+                    <TreeView Grid.Row="1" ItemsSource="{Binding NodeLibraryTree}" Margin="10,0,10,10">
+                        <TreeView.ItemTemplate>
+                            <TreeDataTemplate ItemsSource="{Binding Children}">
+                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                    <!-- If it's a leaf node (has NodeType), make it a button-like item -->
+                                    <TextBlock Text="{Binding Name}" Foreground="White" Margin="5,2"/>
+                                </StackPanel>
+                            </TreeDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                </Grid>
             </Border>
 
             <Border Grid.Column="1" Background="#1E1E1E" CornerRadius="4" ClipToBounds="True">
@@ -129,53 +92,42 @@
                 </ScrollViewer>
             </Border>
 
+            <!-- Right Panel Structure Update -->
             <Border Grid.Column="2" Background="#252526" Margin="5,0,0,0">
-                <Grid RowDefinitions="*,Auto,200">
-                    <Border Grid.Row="0" Margin="10,10,10,5" CornerRadius="4" Background="#1E1E1E">
-                        <Grid RowDefinitions="Auto,Auto,*,Auto">
-                            <TextBlock Grid.Row="0" Text="Inspector" FontWeight="Bold" Foreground="White" Margin="10"/>
-                            <TextBlock Grid.Row="0" Text="{Binding SelectedFile.FileName}" HorizontalAlignment="Right" Margin="10" Foreground="Gray"/>
+                <ScrollViewer>
+                    <StackPanel Margin="10">
+                        <!-- Node Settings (Visible when a node is selected) -->
+                        <Border IsVisible="{Binding SelectedNode, Converter={x:Static ObjectConverters.IsNotNull}}" 
+                                Background="#1E1E1E" CornerRadius="4" Margin="0,0,0,10">
+                            <StackPanel Margin="10">
+                                <TextBlock Text="Node Settings" FontWeight="Bold" Foreground="White" Margin="0,0,0,10"/>
+                                <TextBlock Text="{Binding SelectedNode.Title}" Foreground="#007ACC" Margin="0,0,0,10"/>
+                                
+                                <ItemsControl ItemsSource="{Binding SelectedNode.Parameters}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:NodeParameterViewModel">
+                                            <StackPanel Margin="0,5">
+                                                <TextBlock Text="{Binding Label}" Foreground="Gray" FontSize="12"/>
+                                                
+                                                <!-- Render different controls based on Type -->
+                                                <TextBox Text="{Binding Value}" IsVisible="{Binding Type, Converter={x:Static conv:IsEqualConverter.Instance}, ConverterParameter=Text}" Margin="0,2"/>
+                                                
+                                                <NumericUpDown Value="{Binding Value}" IsVisible="{Binding Type, Converter={x:Static conv:IsEqualConverter.Instance}, ConverterParameter=Number}" Margin="0,2"/>
+                                                
+                                                <ComboBox ItemsSource="{Binding Options}" SelectedItem="{Binding Value}" IsVisible="{Binding Type, Converter={x:Static conv:IsEqualConverter.Instance}, ConverterParameter=Dropdown}" Margin="0,2"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
 
-                            <Border Grid.Row="1" Margin="10,5,10,5" CornerRadius="4" Background="#121212" MaxHeight="200"
-                                    IsVisible="{Binding SelectedFile, Converter={x:Static ObjectConverters.IsNotNull}}">
-                                <Grid>
-                                    <Image Source="{Binding SelectedFileThumbnail}" Stretch="Uniform" Margin="10"
-                                           IsVisible="{Binding SelectedFileThumbnail, Converter={x:Static ObjectConverters.IsNotNull}}"/>
-                                    <ScrollViewer IsVisible="{Binding SelectedFilePreviewText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                        <TextBlock Text="{Binding SelectedFilePreviewText}" Foreground="White" FontSize="12" FontFamily="Consolas" TextWrapping="Wrap" Margin="10"/>
-                                    </ScrollViewer>
-                                </Grid>
-                            </Border>
-
-                            <ListBox Grid.Row="2" ItemsSource="{Binding SelectedFileMetadata}" Margin="10,0,10,10">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate x:DataType="domain:MetadataValue">
-                                        <StackPanel Margin="0,2">
-                                            <TextBlock Text="{Binding FieldName}" FontWeight="Bold" Foreground="#007ACC" FontSize="12"/>
-                                            <TextBlock Text="{Binding ValueText}" Foreground="White" FontSize="14"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Grid>
-                    </Border>
-
-                    <Border Grid.Row="1" Height="1" Background="Gray" Margin="10,0"/>
-
-                    <Border Grid.Row="2" Margin="10,5,10,10" CornerRadius="4" Background="#1E1E1E">
-                        <Grid RowDefinitions="Auto,*">
-                            <TextBlock Grid.Row="0" Text="Results" FontWeight="Bold" Foreground="White" Margin="10"/>
-                            <ListBox Grid.Row="1" ItemsSource="{Binding ResultFiles}" Margin="10,0,10,10"
-                                     SelectionChanged="ResultList_SelectionChanged">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate x:DataType="domain:FileRecord">
-                                        <TextBlock Text="{Binding FileName}" Foreground="White"/>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Grid>
-                    </Border>
-                </Grid>
+                        <!-- File Inspector (Existing) -->
+                        <Border Background="#1E1E1E" CornerRadius="4" Margin="0,0,0,10">
+                            <!-- ... 原本的 File Inspector 內容 ... -->
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
         </Grid>
     </DockPanel>

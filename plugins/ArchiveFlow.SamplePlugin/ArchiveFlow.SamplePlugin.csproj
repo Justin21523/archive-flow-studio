@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Output to the main app's Plugins directory -->
+    <OutputPath>../../Data/Plugins/</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <!-- Reference the Application project to access interfaces -->
+  <ItemGroup>
+    <ProjectReference Include="../../src/ArchiveFlow.Application/ArchiveFlow.Application.csproj" />
+  </ItemGroup>
+
+</Project>
