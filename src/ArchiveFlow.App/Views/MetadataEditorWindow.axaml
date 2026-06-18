@@ -47,7 +47,7 @@
                                                     CornerRadius="4" Padding="10,8"
                                                     Margin="10,0"/>
                                             <Button Grid.Column="2" Content="Remove" 
-                                                   Command="{Binding $parent[UserControl].DataContext.RemoveFieldCommand}"
+                                                   Command="{ReflectionBinding $parent[Window].DataContext.RemoveFieldCommand}"
                                                    CommandParameter="{Binding}"
                                                    Foreground="#FF6B6B" Padding="8,4"
                                                    HorizontalAlignment="Right"/>
@@ -81,7 +81,7 @@
                                                     TextWrapping="Wrap"
                                                     MinHeight="60"/>
                                             <Button Grid.Column="2" Content="Remove" 
-                                                   Command="{Binding $parent[UserControl].DataContext.RemoveFieldCommand}"
+                                                   Command="{ReflectionBinding $parent[Window].DataContext.RemoveFieldCommand}"
                                                    CommandParameter="{Binding}"
                                                    Foreground="#FF6B6B" Padding="8,4"
                                                    HorizontalAlignment="Right"/>
@@ -112,7 +112,7 @@
                                                     CornerRadius="4" Padding="10,8"
                                                     Margin="10,0"/>
                                             <Button Grid.Column="2" Content="Remove" 
-                                                   Command="{Binding $parent[UserControl].DataContext.RemoveFieldCommand}"
+                                                   Command="{ReflectionBinding $parent[Window].DataContext.RemoveFieldCommand}"
                                                    CommandParameter="{Binding}"
                                                    Foreground="#FF6B6B" Padding="8,4"
                                                    HorizontalAlignment="Right"/>
@@ -162,7 +162,7 @@
                             <StackPanel>
                                 <TextBlock Text="Field Name" Foreground="#888" FontSize="12" Margin="0,0,0,5"/>
                                 <TextBox Text="{Binding NewFieldName}" Background="#1E1E1E" Foreground="White"
-                                        CornerRadius="4" Padding="10,8" Watermark="e.g., Author, Subject, Tag"/>
+                                        CornerRadius="4" Padding="10,8" PlaceholderText="e.g., Author, Subject, Tag"/>
                             </StackPanel>
                             
                             <StackPanel>
@@ -179,7 +179,7 @@
                             <StackPanel>
                                 <TextBlock Text="Value" Foreground="#888" FontSize="12" Margin="0,0,0,5"/>
                                 <TextBox Text="{Binding NewFieldValue}" Background="#1E1E1E" Foreground="White"
-                                        CornerRadius="4" Padding="10,8" Watermark="Enter value..."
+                                        CornerRadius="4" Padding="10,8" PlaceholderText="Enter value..."
                                         AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80"/>
                             </StackPanel>
                             

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ArchiveFlow.Application.Interfaces;
 using ArchiveFlow.Domain.Entities;
+using Avalonia.Controls.ApplicationLifetimes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,6 @@ public partial class MetadataEditorViewModel : ObservableObject
 {
     private readonly IMetadataRepository _metadataRepository;
     private readonly ILogger<MetadataEditorViewModel> _logger;
-    private readonly string _fileId;
 
     [ObservableProperty] private string _fileName = string.Empty;
     [ObservableProperty] private string _fileId = string.Empty;
@@ -37,7 +37,6 @@ public partial class MetadataEditorViewModel : ObservableObject
     {
         _metadataRepository = metadataRepository;
         _logger = logger;
-        _fileId = fileId;
         FileId = fileId;
         FileName = fileName;
         
@@ -49,7 +48,7 @@ public partial class MetadataEditorViewModel : ObservableObject
         try
         {
             StatusMessage = "Loading metadata...";
-            var metadata = await _metadataRepository.GetMetadataByFileIdAsync(_fileId);
+            var metadata = await _metadataRepository.GetMetadataByFileIdAsync(FileId);
             
             BasicFields.Clear();
             DescriptiveFields.Clear();
@@ -110,7 +109,7 @@ public partial class MetadataEditorViewModel : ObservableObject
                     
                     if (metaField != null)
                     {
-                        await _metadataRepository.AddMetadataValueAsync(_fileId, metaField.Id, field.ValueText);
+                        await _metadataRepository.AddMetadataValueAsync(FileId, metaField.Id, field.ValueText);
                         field.IsModified = false;
                     }
                 }
@@ -141,7 +140,7 @@ public partial class MetadataEditorViewModel : ObservableObject
             
             if (metaField != null)
             {
-                await _metadataRepository.AddMetadataValueAsync(_fileId, metaField.Id, NewFieldValue);
+                await _metadataRepository.AddMetadataValueAsync(FileId, metaField.Id, NewFieldValue);
                 
                 var newVm = new MetadataFieldViewModel(new MetadataValue
                 {
@@ -187,7 +186,7 @@ public partial class MetadataEditorViewModel : ObservableObject
     private void Close()
     {
         // Find the window and close it
-        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        if (global::Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow?.Close();
         }

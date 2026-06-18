@@ -6,7 +6,11 @@ using ArchiveFlow.Application.Interfaces;
 
 namespace ArchiveFlow.Application.Nodes.Actions;
 
-public class AddTagNode : IArchiveNode
+/// <summary>
+/// Action node that adds a specific tag to all files in the current context.
+/// Implements IActionNode for safe Preview/Apply workflow.
+/// </summary>
+public class AddTagNode : IActionNode
 {
     private readonly IMetadataRepository _metadataRepo;
     private readonly string _tagName;
@@ -22,16 +26,33 @@ public class AddTagNode : IArchiveNode
         _tagName = tagName;
     }
 
-    public async Task ExecuteAsync(NodeExecutionContext context, CancellationToken cancellationToken = default)
+    public async Task<ActionPreview> PreviewAsync(NodeExecutionContext context, CancellationToken cancellationToken = default)
+    {
+        // In a real app, we would check which files already have this tag to give an accurate count.
+        // For MVP, we assume all files in context will be affected.
+        return await Task.FromResult(new ActionPreview
+        {
+            NodeName = DisplayName,
+            AffectedFileCount = context.CurrentFileSet.Count,
+            Description = $"Will add tag '{_tagName}' to {context.CurrentFileSet.Count} files.",
+            IsDangerous = false
+        });
+    }
+
+    public async Task ApplyAsync(NodeExecutionContext context, CancellationToken cancellationToken = default)
     {
         var field = await _metadataRepo.GetOrCreateFieldAsync("tag", "Tag");
         if (field == null) return;
 
         foreach (var file in context.CurrentFileSet.ToList())
         {
-            // 檢查是否已存在該 Tag (簡化版：直接插入，實際應用應檢查重複)
             await _metadataRepo.AddMetadataValueAsync(file.Id, field.Id, _tagName);
         }
-        // Tag Node 不改變文件集合，只產生副作用 (Side Effect)
+    }
+
+    // Fallback for linear execution if not using Preview/Apply flow
+    public async Task ExecuteAsync(NodeExecutionContext context, CancellationToken cancellationToken = default)
+    {
+        await ApplyAsync(context, cancellationToken);
     }
 }

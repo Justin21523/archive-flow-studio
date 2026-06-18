@@ -94,6 +94,11 @@ public partial class NodeViewModel : ObservableObject
         Parameters.Add(p);
     }
 
+    public void AddNumberParam(string label, string defaultValue = "0")
+    {
+        Parameters.Add(new NodeParameterViewModel(label, "Number", defaultValue));
+    }
+
     public string ParameterValue
     {
         get => Parameters.FirstOrDefault()?.Value ?? string.Empty;

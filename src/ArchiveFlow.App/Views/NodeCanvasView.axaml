@@ -153,9 +153,44 @@
             </Border>
 
             <!-- Right Panel: Metadata Editor & Inspector -->
-            <Border Grid.Column="2" Background="#252526" Margin="5,0,0,0">
+            <Border IsVisible="{Binding HasPendingActions}" 
+                    Background="#3D2817" 
+                    BorderBrush="#FF9800" 
+                    BorderThickness="2"
+                    CornerRadius="6" 
+                    Margin="0,0,0,15">
                 <ScrollViewer>
                     <StackPanel Margin="15">
+                        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+                            <Path Data="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" 
+                                Fill="#FF9800" Width="20" Height="20" VerticalAlignment="Center"/>
+                            <TextBlock Text="Pending Actions" FontWeight="Bold" Foreground="#FF9800" FontSize="14" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <TextBlock Text="The following changes are ready to be applied:" 
+                                Foreground="White" FontSize="12" Margin="0,0,0,10"/>
+
+                        <ItemsControl ItemsSource="{Binding PendingPreviews}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ActionPreview">
+                                    <Border Background="#2D2D30" CornerRadius="4" Padding="10" Margin="0,0,0,5">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding NodeName}" FontWeight="Bold" Foreground="White" FontSize="12"/>
+                                            <TextBlock Text="{Binding Description}" Foreground="#CCC" FontSize="11" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                                            <TextBlock Text="{Binding AffectedFileCount, StringFormat='Affected Files: {0}'}" 
+                                                    Foreground="#888" FontSize="10"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Button Content="Apply All Changes" 
+                                Command="{Binding ApplyPendingActionsCommand}" 
+                                Classes="accent" 
+                                HorizontalAlignment="Stretch" 
+                                Margin="0,10,0,0"
+                                Padding="10,8"/>
                         <!-- File ID & Basic Info -->
                         <Border IsVisible="{Binding SelectedFile, Converter={x:Static ObjectConverters.IsNotNull}}"
                             Background="#1E1E1E" CornerRadius="6" Padding="15" Margin="0,0,0,15">

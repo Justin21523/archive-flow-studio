@@ -22,6 +22,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NodeDefinition = ArchiveFlow.Application.Nodes.Definitions.NodeDefinition;
 using NodeRegistry = ArchiveFlow.Application.Services.NodeRegistry;
@@ -73,6 +74,8 @@ public partial class NodeCanvasViewModel : ObservableObject
     [ObservableProperty] private double _canvasViewportCenterX = 1500;
     [ObservableProperty] private double _canvasViewportCenterY = 1000;
     [ObservableProperty] private BatchJobInfo _currentBatchJob = new() { JobName = "Idle", StatusMessage = "No active jobs." };
+    [ObservableProperty] private ObservableCollection<ActionPreview> _pendingPreviews = new();
+    [ObservableProperty] private bool _hasPendingActions = false;   
 
     private const double NodeDefaultWidth = 200;
     private const double NodeDefaultHeight = 130;
@@ -170,7 +173,7 @@ public partial class NodeCanvasViewModel : ObservableObject
 
         var viewModel = new MetadataEditorViewModel(
             _metadataRepository,
-            _logger,
+            _serviceProvider.GetRequiredService<ILogger<MetadataEditorViewModel>>(),
             SelectedFile.Id,
             SelectedFile.FileName);
 
@@ -180,7 +183,7 @@ public partial class NodeCanvasViewModel : ObservableObject
         };
 
         // 取得主視窗並顯示
-        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        if (global::Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop && desktop.MainWindow != null)
         {
             window.Show(desktop.MainWindow);
         }
@@ -691,34 +694,96 @@ public partial class NodeCanvasViewModel : ObservableObject
     {
         ExecutionLog = "Executing workflow...\n";
         ResultFiles.Clear();
-        SelectedFileMetadata.Clear();
-        SelectedFile = null;
+        PendingPreviews.Clear();
+        HasPendingActions = false;
 
         try
         {
             var sortedNodes = GetTopologicalOrder();
-            _logger.LogInformation($"Executing {sortedNodes.Count} nodes");
-            
             var context = new NodeExecutionContext();
+            var actionNodesToApply = new List<(NodeViewModel Vm, IActionNode Node)>();
 
+            // Phase 1: Execute Query Nodes & Collect Action Nodes
             foreach (var nodeVm in sortedNodes)
             {
-                nodeVm.Status = "Running";
                 var backendNode = CreateBackendNode(nodeVm);
-                await backendNode.ExecuteAsync(context, CancellationToken.None);
-                nodeVm.Status = $"Success ({context.CurrentFileSet.Count})";
-                ExecutionLog += $"[{nodeVm.Title}] Count: {context.CurrentFileSet.Count}\n";
+                
+                if (backendNode is IActionNode actionNode)
+                {
+                    // Don't execute yet, just collect for preview
+                    var preview = await actionNode.PreviewAsync(context);
+                    PendingPreviews.Add(preview);
+                    actionNodesToApply.Add((nodeVm, actionNode));
+                    nodeVm.Status = "Pending Apply";
+                }
+                else
+                {
+                    // Execute Query Nodes immediately
+                    nodeVm.Status = "Running";
+                    await backendNode.ExecuteAsync(context);
+                    nodeVm.Status = $"Success ({context.CurrentFileSet.Count})";
+                    ExecutionLog += $"[{nodeVm.Title}] Count: {context.CurrentFileSet.Count}\n";
+                }
             }
 
+            // Populate Result Table with the current file set (after all Query Nodes)
             foreach (var file in context.CurrentFileSet) ResultFiles.Add(file);
-            ExecutionLog += $"\nWorkflow completed. Total: {ResultFiles.Count} files\n";
+
+            // Phase 2: Check if there are pending actions
+            if (actionNodesToApply.Count > 0)
+            {
+                HasPendingActions = true;
+                ExecutionLog += $"\n--- PAUSED ---\n{actionNodesToApply.Count} Action(s) require your confirmation.\nReview the Preview panel and click 'Apply Changes' to proceed.\n";
+            }
+            else
+            {
+                ExecutionLog += "\nWorkflow completed successfully (Query Only).\n";
+            }
         }
         catch (Exception ex) 
         { 
-            _logger.LogError(ex, "Workflow failed");
             ExecutionLog += $"Error: {ex.Message}\n"; 
         }
     }
+    
+    // 新增 Apply Changes Command
+    [RelayCommand]
+    private async Task ApplyPendingActionsAsync()
+    {
+        if (!HasPendingActions) return;
+
+        ExecutionLog += "Applying changes...\n";
+        var sortedNodes = GetTopologicalOrder();
+        var context = new NodeExecutionContext();
+        
+        // Re-execute Query Nodes to restore context state
+        foreach (var nodeVm in sortedNodes)
+        {
+            var backendNode = CreateBackendNode(nodeVm);
+            if (backendNode is not IActionNode)
+            {
+                await backendNode.ExecuteAsync(context);
+            }
+        }
+
+        // Execute Action Nodes
+        foreach (var nodeVm in sortedNodes)
+        {
+            var backendNode = CreateBackendNode(nodeVm);
+            if (backendNode is IActionNode actionNode)
+            {
+                nodeVm.Status = "Applying...";
+                await actionNode.ApplyAsync(context);
+                nodeVm.Status = "Applied";
+                ExecutionLog += $"[{nodeVm.Title}] Applied successfully.\n";
+                
+                // TODO: Log to Batch Job Service here
+            }
+        }
+        HasPendingActions = false;
+        PendingPreviews.Clear();
+        ExecutionLog += "All changes applied and saved.\n";
+    }          
 
     private List<NodeViewModel> GetTopologicalOrder()
     {
