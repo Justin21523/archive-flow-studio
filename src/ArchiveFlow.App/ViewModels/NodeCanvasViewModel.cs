@@ -12,6 +12,9 @@ using ArchiveFlow.Application.Nodes.Actions;
 using ArchiveFlow.Domain.Entities;
 using ArchiveFlow.Application.DTOs;
 using ArchiveFlow.Application.Services;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -32,6 +35,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     private readonly IBatchJobService _batchJobService;
     private readonly NodeRegistry _nodeRegistry;
     private readonly IRelationshipRepository _relationshipRepository;
+    private readonly IDublinCoreExportService _dcExportService;
     public ObservableCollection<NodeLibraryItem> NodeLibraryTree { get; } = new();
 
     public ObservableCollection<NodeViewModel> Nodes { get; } = new();
@@ -64,6 +68,8 @@ public partial class NodeCanvasViewModel : ObservableObject
         IAutoTaggingService autoTaggingService,
         IBatchJobService batchJobService,
         NodeRegistry nodeRegistry,
+        IRelationshipRepository relationshipRepository,
+        IDublinCoreExportService dcExportService,
         ILogger<NodeCanvasViewModel> logger)
     {
         _fileRepository = fileRepository;
@@ -74,6 +80,8 @@ public partial class NodeCanvasViewModel : ObservableObject
         _autoTaggingService = autoTaggingService;
         _batchJobService = batchJobService;
         _nodeRegistry = nodeRegistry;
+        _relationshipRepository = relationshipRepository;
+        _dcExportService = dcExportService;
         _logger = logger;
         
         InitializeDefaultNodes();
@@ -90,9 +98,6 @@ public partial class NodeCanvasViewModel : ObservableObject
             PluginNodeDefinitions.Add(def);
         }
     }
-    [RelayCommand] private void AddCreateRelationship() => AddNodeInternal("Link to Target", "CreateRelationship", 450, 150, "TARGET_FILE_ID_HERE");
-    [RelayCommand] private void AddFindRelated() => AddNodeInternal("Find Related", "FindRelated", 450, 250, "SOURCE_FILE_ID_HERE");
-
     // 新增 Command 用於動態新增插件節點
     [RelayCommand]
     private void AddPluginNode(NodeDefinition definition)
@@ -100,6 +105,24 @@ public partial class NodeCanvasViewModel : ObservableObject
         if (definition == null) return;
         AddNodeInternal(definition.DisplayName, definition.NodeType);
     }
+
+    [RelayCommand]
+    private async Task CopyFileIdAsync()
+    {
+        if (SelectedFile == null) return;
+
+        // 複製 ID 到剪貼簿
+        var clipboard = (global::Avalonia.Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
+            ?.MainWindow?.Clipboard;
+        
+        if (clipboard != null)
+        {
+            await clipboard.SetTextAsync(SelectedFile.Id);
+            
+            // 顯示通知（可選）
+            ExecutionLog += $"Copied File ID to clipboard: {SelectedFile.Id}\n";
+        }
+    }    
     
     // Add these commands for performance optimization
     [RelayCommand]
@@ -226,19 +249,34 @@ public partial class NodeCanvasViewModel : ObservableObject
     }
 
     // --- Node Commands ---
+    // Sources
     [RelayCommand] private void AddAllFiles() => AddNodeInternal("All Files", "AllFiles");
+    [RelayCommand] private void AddFolderScanner() => AddNodeInternal("Folder Scanner", "FolderScanner");
+
+    // Filters
     [RelayCommand] private void AddFilterTxt() => AddNodeInternal("Filter: .txt", "FilterTxt");
     [RelayCommand] private void AddFilterMd() => AddNodeInternal("Filter: .md", "FilterMd");
     [RelayCommand] private void AddDynamicRule() => AddNodeInternal("Dynamic Rule", "DynamicRule", "type:.png");
+    [RelayCommand] private void AddFullTextSearch() => AddNodeInternal("Full Text Search", "FullTextSearch", "search term");
+
+    // Actions
     [RelayCommand] private void AddTagAI() => AddNodeInternal("Add Tag: AI", "AddTagAI");
     [RelayCommand] private void AddSubjectCS() => AddNodeInternal("Set Subject: CS", "SetSubjectCS");
-    [RelayCommand] private void AddFullTextSearch() => AddNodeInternal("Full Text Search", "FullTextSearch", "test");
-    [RelayCommand] private void AddExportCsv() => AddNodeInternal("Export CSV", "ExportCsv", "output.csv");
-    [RelayCommand] private void AddExportJson() => AddNodeInternal("Export JSON", "ExportJson", "output.json");
-    [RelayCommand] private void AddResultTable() => AddNodeInternal("Result Table", "Result");
     [RelayCommand] private void AddAutoTag() => AddNodeInternal("Auto-Tag Files", "AutoTag");
+
+    // DAG Logic
     [RelayCommand] private void AddConditionBranch() => AddNodeInternal("Condition Branch", "ConditionBranch", "size:>5000");
     [RelayCommand] private void AddMergeBranches() => AddNodeInternal("Merge Branches", "MergeBranches");
+
+    // Relationships
+    [RelayCommand] private void AddCreateRelationship() => AddNodeInternal("Link to Target", "CreateRelationship", "TARGET_FILE_ID_HERE");
+    [RelayCommand] private void AddFindRelated() => AddNodeInternal("Find Related", "FindRelated", "SOURCE_FILE_ID_HERE");
+
+    // Outputs
+    [RelayCommand] private void AddResultTable() => AddNodeInternal("Result Table", "Result");
+    [RelayCommand] private void AddExportCsv() => AddNodeInternal("Export CSV", "ExportCsv", "output.csv");
+    [RelayCommand] private void AddExportJson() => AddNodeInternal("Export JSON", "ExportJson", "output.json");
+    [RelayCommand] private void AddExportDublinCore() => AddNodeInternal("Export Dublin Core", "ExportDcXml", "metadata_export.xml");
     
     // --- Update the CreateBackendNode method to include new cases ---
     private IArchiveNode CreateBackendNode(NodeViewModel vm)
@@ -247,20 +285,22 @@ public partial class NodeCanvasViewModel : ObservableObject
         var builtInNode = vm.NodeType switch
         {
             "AllFiles" => new AllFilesNode(_fileRepository, _searchService, _previewService),
+            "FolderScanner" => new FolderScannerNode(_fileRepository, _searchService, _previewService),
             "FilterTxt" => new FileTypeFilterNode(".txt"),
             "FilterMd" => new FileTypeFilterNode(".md"),
-            "Result" => new PassThroughNode(),
+            "FullTextSearch" => new FullTextSearchNode(_searchService, vm.ParameterValue),
+            "DynamicRule" => new DynamicRuleNode(vm.ParameterValue),
             "AddTagAI" => new AddTagNode(_metadataRepository, "AI"),
             "SetSubjectCS" => new SetSubjectNode(_metadataRepository, "Computer Science"),
-            "FullTextSearch" => new FullTextSearchNode(_searchService, vm.ParameterValue),
-            "ExportCsv" => new ExportCsvNode(vm.ParameterValue),
-            "ExportJson" => new ExportJsonNode(vm.ParameterValue),
-            "DynamicRule" => new DynamicRuleNode(vm.ParameterValue),
             "AutoTag" => new AutoTagNode(_autoTaggingService),
             "ConditionBranch" => new ConditionBranchNode(vm.ParameterValue),
             "MergeBranches" => new MergeBranchesNode(),
             "CreateRelationship" => new CreateRelationshipNode(_relationshipRepository, vm.ParameterValue, "References"),
             "FindRelated" => new FindRelatedFilesNode(_relationshipRepository, _fileRepository, vm.ParameterValue),
+            "Result" => new PassThroughNode(),
+            "ExportCsv" => new ExportCsvNode(vm.ParameterValue),
+            "ExportJson" => new ExportJsonNode(vm.ParameterValue),
+            "ExportDcXml" => new ExportDublinCoreNode(_dcExportService, vm.ParameterValue),
             _ => (IArchiveNode?)null
         };
 
@@ -323,6 +363,16 @@ public partial class NodeCanvasViewModel : ObservableObject
             case "ExportJson":
                 newNode.AddTextParam("Filename", "output");
                 newNode.AddDropdownParam("Encoding", "UTF-8", "ASCII");
+                break;
+            case "CreateRelationship":
+                newNode.AddTextParam("Target File ID", defaultParam);
+                newNode.AddDropdownParam("Relation Type", "References", "HasNote", "UsesAsset", "RelatedTo");
+                break;
+            case "FindRelated":
+                newNode.AddTextParam("Source File ID", defaultParam);
+                break;
+            case "ExportDcXml":
+                newNode.AddTextParam("Output XML", string.IsNullOrWhiteSpace(defaultParam) ? "metadata_export.xml" : defaultParam);
                 break;
         }
 
@@ -649,6 +699,7 @@ public partial class NodeCanvasViewModel : ObservableObject
 
         // 4. Outputs
         var outputs = new NodeLibraryItem("Outputs", isCategory: true);
+        outputs.Children.Add(new NodeLibraryItem("Export Dublin Core XML", "ExportDcXml"));
         outputs.Children.Add(new NodeLibraryItem("Result Table", "Result"));
         outputs.Children.Add(new NodeLibraryItem("Export CSV", "ExportCsv"));
         outputs.Children.Add(new NodeLibraryItem("Export JSON", "ExportJson"));
@@ -658,6 +709,7 @@ public partial class NodeCanvasViewModel : ObservableObject
         var relationships = new NodeLibraryItem("Relationships", isCategory: true);
         relationships.Children.Add(new NodeLibraryItem("Link to Target", "CreateRelationship"));
         relationships.Children.Add(new NodeLibraryItem("Find Related", "FindRelated"));
+        NodeLibraryTree.Add(relationships);
     }
 
 }

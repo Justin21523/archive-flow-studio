@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:ArchiveFlow.App.ViewModels"
+             xmlns:conv="using:ArchiveFlow.App.Converters"
              x:Class="ArchiveFlow.App.Views.GraphExplorerView"
              x:DataType="vm:GraphExplorerViewModel">
 
@@ -49,7 +50,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:GraphEdgeViewModel">
                             <Grid>
-                                <Line X1="{Binding X1}" Y1="{Binding Y1}" X2="{Binding X2}" Y2="{Binding Y2}" 
+                                <Line StartPoint="{Binding StartPoint}" EndPoint="{Binding EndPoint}" 
                                       Stroke="#007ACC" StrokeThickness="2" Opacity="0.6"/>
                                 <TextBlock Text="{Binding RelationType}" 
                                            Foreground="#888" FontSize="10"

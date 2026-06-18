@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ArchiveFlow.Application.Interfaces;
 using ArchiveFlow.Domain.Entities;
+using Avalonia;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -131,6 +132,9 @@ public partial class GraphEdgeViewModel : ObservableObject
     [ObservableProperty] private double _y1;
     [ObservableProperty] private double _x2;
     [ObservableProperty] private double _y2;
+
+    public Point StartPoint => new(X1, Y1);
+    public Point EndPoint => new(X2, Y2);
 
     public GraphEdgeViewModel(GraphNodeViewModel source, GraphNodeViewModel target, string relationType)
     {

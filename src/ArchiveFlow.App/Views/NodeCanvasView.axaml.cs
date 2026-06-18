@@ -406,10 +406,22 @@ public partial class NodeCanvasView : UserControl
             var command = nodeType switch
             {
                 "AllFiles" => _viewModel?.AddAllFilesCommand,
+                "FolderScanner" => _viewModel?.AddFolderScannerCommand,
                 "FilterTxt" => _viewModel?.AddFilterTxtCommand,
                 "FilterMd" => _viewModel?.AddFilterMdCommand,
+                "FullTextSearch" => _viewModel?.AddFullTextSearchCommand,
+                "DynamicRule" => _viewModel?.AddDynamicRuleCommand,
                 "AddTagAI" => _viewModel?.AddTagAICommand,
+                "SetSubjectCS" => _viewModel?.AddSubjectCSCommand,
+                "AutoTag" => _viewModel?.AddAutoTagCommand,
+                "ConditionBranch" => _viewModel?.AddConditionBranchCommand,
+                "MergeBranches" => _viewModel?.AddMergeBranchesCommand,
+                "CreateRelationship" => _viewModel?.AddCreateRelationshipCommand,
+                "FindRelated" => _viewModel?.AddFindRelatedCommand,
                 "Result" => _viewModel?.AddResultTableCommand,
+                "ExportCsv" => _viewModel?.AddExportCsvCommand,
+                "ExportJson" => _viewModel?.AddExportJsonCommand,
+                "ExportDcXml" => _viewModel?.AddExportDublinCoreCommand,
                 _ => null
             };
             

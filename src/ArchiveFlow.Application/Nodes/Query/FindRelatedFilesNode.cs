@@ -34,7 +34,8 @@ public class FindRelatedFilesNode : IArchiveNode
 
         var relationships = await _relationshipRepository.GetRelationshipsByFileIdAsync(SourceFileId);
         var relatedIds = relationships
-            .Where(r => r.SourceFileId == SourceFileId ? r.TargetFileId : r.SourceFileId)
+            .Select(r => r.SourceFileId == SourceFileId ? r.TargetFileId : r.SourceFileId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct()
             .ToList();
 
