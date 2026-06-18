@@ -8,94 +8,139 @@
              Focusable="True"
              KeyDown="UserControl_KeyDown">
 
-    <Grid ColumnDefinitions="200,*,300">
+    <Grid ColumnDefinitions="220,*,300">
         
-        <!-- 左側：Node Library -->
+        <!-- Left: Grouped Node Library -->
         <Border Grid.Column="0" Background="#252526" Margin="0,0,5,0">
-            <StackPanel Margin="10">
-                <TextBlock Text="Node Library" FontWeight="Bold" Foreground="White" Margin="0,0,0,10"/>
-                
-                <TextBlock Text="Sources" Foreground="Gray" Margin="0,5"/>
-                <Button Content="All Files" Command="{Binding AddAllFilesCommand}" Margin="0,2"/>
-                
-                <TextBlock Text="Filters" Foreground="Gray" Margin="0,10,0,5"/>
-                <Button Content="Filter .txt" Command="{Binding AddFilterTxtCommand}" Margin="0,2"/>
-                <Button Content="Filter .md" Command="{Binding AddFilterMdCommand}" Margin="0,2"/>
-                
-                <TextBlock Text="Rules" Foreground="Gray" Margin="0,10,0,5"/>
-                <Button Content="Dynamic Rule" Command="{Binding AddDynamicRuleCommand}" Margin="0,2"/>
+            <ScrollViewer>
+                <StackPanel Margin="10">
+                    <TextBlock Text="Node Library" FontWeight="Bold" Foreground="White" Margin="0,0,0,10"/>
+                    
+                    <Expander Header="Sources" IsExpanded="True" Margin="0,2">
+                        <StackPanel Margin="10,5">
+                            <Button Content="All Files" Command="{Binding AddAllFilesCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                        </StackPanel>
+                    </Expander>
+                    
+                    <Expander Header="Filters &amp; Rules" IsExpanded="True" Margin="0,2">
+                        <StackPanel Margin="10,5">
+                            <Button Content="Filter .txt" Command="{Binding AddFilterTxtCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                            <Button Content="Filter .md" Command="{Binding AddFilterMdCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                            <Button Content="Dynamic Rule" Command="{Binding AddDynamicRuleCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                        </StackPanel>
+                    </Expander>
 
-                <TextBlock Text="Actions" Foreground="Gray" Margin="0,10,0,5"/>
-                <Button Content="Add Tag: AI" Command="{Binding AddTagAICommand}" Margin="0,2"/>
-                <Button Content="Set Subject: CS" Command="{Binding AddSubjectCSCommand}" Margin="0,2"/>
-                
-                <TextBlock Text="Search" Foreground="Gray" Margin="0,10,0,5"/>
-                <Button Content="Full Text Search" Command="{Binding AddFullTextSearchCommand}" Margin="0,2"/>
-                
-                <TextBlock Text="Export" Foreground="Gray" Margin="0,10,0,5"/>
-                <Button Content="Export CSV" Command="{Binding AddExportCsvCommand}" Margin="0,2"/>
-                <Button Content="Export JSON" Command="{Binding AddExportJsonCommand}" Margin="0,2"/>
-                
-                <TextBlock Text="Outputs" Foreground="Gray" Margin="0,10,0,5"/>
-                <Button Content="Result Table" Command="{Binding AddResultTableCommand}" Margin="0,2"/>
-                
-                <Border Height="1" Background="Gray" Margin="0,15"/>
-                <Button Content="Execute Workflow" Command="{Binding ExecuteWorkflowCommand}" Classes="accent" Margin="0,5"/>
-                <Border Height="1" Background="Gray" Margin="0,10"/>
-                
-                <TextBlock Text="Workflow" Foreground="Gray" Margin="0,5"/>
-                <Button Content="Save Workflow" Command="{Binding SaveWorkflowCommand}" Margin="0,2"/>
-                <Button Content="Load Workflow" Command="{Binding LoadWorkflowCommand}" Margin="0,2"/>
-                            
-            </StackPanel>
+                    <Expander Header="Actions (Metadata)" IsExpanded="True" Margin="0,2">
+                        <StackPanel Margin="10,5">
+                            <Button Content="Add Tag: AI" Command="{Binding AddTagAICommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                            <Button Content="Set Subject: CS" Command="{Binding AddSubjectCSCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <Expander Header="Search &amp; Export" IsExpanded="True" Margin="0,2">
+                        <StackPanel Margin="10,5">
+                            <Button Content="Full Text Search" Command="{Binding AddFullTextSearchCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                            <Button Content="Export CSV" Command="{Binding AddExportCsvCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                            <Button Content="Export JSON" Command="{Binding AddExportJsonCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <Expander Header="Outputs" IsExpanded="True" Margin="0,2">
+                        <StackPanel Margin="10,5">
+                            <Button Content="Result Table" Command="{Binding AddResultTableCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                        </StackPanel>
+                    </Expander>
+
+                    <Border Height="1" Background="Gray" Margin="0,15"/>
+                    
+                    <Button Content="Execute Workflow (F5)" Command="{Binding ExecuteWorkflowCommand}" Classes="accent" Margin="0,5" HorizontalAlignment="Stretch"/>
+                    <Button Content="Save Workflow" Command="{Binding SaveWorkflowCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                    <Button Content="Load Workflow" Command="{Binding LoadWorkflowCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                </StackPanel>
+            </ScrollViewer>
         </Border>
 
-        <!-- 中間：Canvas -->
+        <!-- Center: Canvas with Context Menu -->
         <Border Grid.Column="1" Background="#1E1E1E" CornerRadius="4" ClipToBounds="True">
-            <Canvas x:Name="MainCanvas" Width="3000" Height="2000" Background="Transparent"
-                    HorizontalAlignment="Left" VerticalAlignment="Top"
-                    PointerMoved="Canvas_PointerMoved" PointerReleased="Canvas_PointerReleased">
+            <ScrollViewer x:Name="CanvasViewport"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto"
+                          SizeChanged="CanvasViewport_SizeChanged"
+                          ScrollChanged="CanvasViewport_ScrollChanged">
+                <Canvas x:Name="MainCanvas" Width="3000" Height="2000" Background="Transparent"
+                        PointerMoved="Canvas_PointerMoved" PointerReleased="Canvas_PointerReleased">
+                
+                <!-- Right-Click Context Menu -->
+                <Canvas.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Add Node">
+                            <MenuItem Header="Sources">
+                                <MenuItem Header="All Files" Command="{Binding AddAllFilesCommand}"/>
+                            </MenuItem>
+                            <MenuItem Header="Filters">
+                                <MenuItem Header="Filter .txt" Command="{Binding AddFilterTxtCommand}"/>
+                                <MenuItem Header="Filter .md" Command="{Binding AddFilterMdCommand}"/>
+                                <MenuItem Header="Dynamic Rule" Command="{Binding AddDynamicRuleCommand}"/>
+                            </MenuItem>
+                            <MenuItem Header="Actions">
+                                <MenuItem Header="Add Tag: AI" Command="{Binding AddTagAICommand}"/>
+                                <MenuItem Header="Set Subject: CS" Command="{Binding AddSubjectCSCommand}"/>
+                            </MenuItem>
+                            <MenuItem Header="Outputs">
+                                <MenuItem Header="Result Table" Command="{Binding AddResultTableCommand}"/>
+                            </MenuItem>
+                        </MenuItem>
+                        <Separator/>
+                        <MenuItem Header="Delete Selected" Command="{Binding DeleteSelectedNodeCommand}" InputGesture="Delete"/>
+                    </ContextMenu>
+                </Canvas.ContextMenu>
 
-                <!-- 連線層由 code-behind 直接同步到 Canvas -->
+                <!-- Edges and nodes are synchronized by NodeCanvasView.axaml.cs so canvas positions stay stable. -->
                 <Canvas x:Name="EdgeLayer" Width="3000" Height="2000" Background="Transparent"/>
                 
-                <!-- 暫存連線 -->
                 <Path Data="{Binding TempEdgePath}" Stroke="#FFA500" StrokeThickness="3" StrokeDashArray="4,4" Fill="Transparent"/>
 
-                <!-- 節點層由 code-behind 直接同步到 Canvas，避免 ItemsControl container 定位失效 -->
                 <Canvas x:Name="NodeLayer" Width="3000" Height="2000" Background="Transparent"/>
-            </Canvas>
+                </Canvas>
+            </ScrollViewer>
         </Border>
 
-        <!-- 右側：Inspector & Results -->
+        <!-- Right: Inspector & Results -->
         <Border Grid.Column="2" Background="#252526" Margin="5,0,0,0">
-            <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,140">
-                <TextBlock Grid.Row="0" Text="Inspector" FontWeight="Bold" Foreground="White" Margin="10"/>
-                
-                <!-- 新增的預覽區 -->
-                <Border Grid.Row="1" Margin="10,5,10,5" CornerRadius="4" Background="#1E1E1E" MaxHeight="250">
-                    <Grid>
-                        <Image Source="{Binding SelectedFileThumbnail}" Stretch="Uniform" Margin="10"
-                            IsVisible="{Binding SelectedFileThumbnail, Converter={x:Static ObjectConverters.IsNotNull}}"/>
-                        <ScrollViewer IsVisible="{Binding SelectedFilePreviewText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                            <TextBlock Text="{Binding SelectedFilePreviewText}" Foreground="White" FontSize="12" FontFamily="Consolas" TextWrapping="Wrap" Margin="10"/>
-                        </ScrollViewer>
+            <Grid RowDefinitions="*,Auto,200">
+                <Border Grid.Row="0" Margin="10,10,10,5" CornerRadius="4" Background="#1E1E1E">
+                    <Grid RowDefinitions="Auto,Auto,*,Auto">
+                        <TextBlock Grid.Row="0" Text="Inspector" FontWeight="Bold" Foreground="White" Margin="10"/>
+                        <TextBlock Grid.Row="0" Text="{Binding SelectedFile.FileName}" HorizontalAlignment="Right" Margin="10" Foreground="Gray"/>
+                        
+                        <!-- Preview Area -->
+                        <Border Grid.Row="1" Margin="10,5,10,5" CornerRadius="4" Background="#121212" MaxHeight="200" 
+                                IsVisible="{Binding SelectedFile, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <Grid>
+                                <Image Source="{Binding SelectedFileThumbnail}" Stretch="Uniform" Margin="10"
+                                       IsVisible="{Binding SelectedFileThumbnail, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                                <ScrollViewer IsVisible="{Binding SelectedFilePreviewText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                    <TextBlock Text="{Binding SelectedFilePreviewText}" Foreground="White" FontSize="12" FontFamily="Consolas" TextWrapping="Wrap" Margin="10"/>
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+
+                        <ListBox Grid.Row="2" ItemsSource="{Binding SelectedFileMetadata}" Margin="10,0,10,10">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="domain:MetadataValue">
+                                    <StackPanel Margin="0,2">
+                                        <TextBlock Text="{Binding FieldName}" FontWeight="Bold" Foreground="#007ACC" FontSize="12"/>
+                                        <TextBlock Text="{Binding ValueText}" Foreground="White" FontSize="14"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
                     </Grid>
                 </Border>
 
-                <TextBlock Grid.Row="2" Text="Metadata" FontWeight="Bold" Foreground="White" Margin="10,5,10,5"/>
-                <ListBox Grid.Row="3" ItemsSource="{Binding SelectedFileMetadata}" Margin="10,0,10,10" MaxHeight="140">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate x:DataType="domain:MetadataValue">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="{Binding FieldName}" Foreground="#C8C8C8" FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding ValueText}" Foreground="White"/>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                <Border Grid.Row="1" Height="1" Background="Gray" Margin="10,0"/>
 
-                <Border Grid.Row="4" Margin="10,5,10,10" CornerRadius="4" Background="#1E1E1E">
+                <Border Grid.Row="2" Margin="10,5,10,10" CornerRadius="4" Background="#1E1E1E">
                     <Grid RowDefinitions="Auto,*">
                         <TextBlock Grid.Row="0" Text="Results" FontWeight="Bold" Foreground="White" Margin="10"/>
                         <ListBox Grid.Row="1" ItemsSource="{Binding ResultFiles}" Margin="10,0,10,10"
@@ -106,15 +151,6 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                    </Grid>
-                </Border>
-
-                <Border Grid.Row="5" Margin="10,0,10,10" CornerRadius="4" Background="#1E1E1E">
-                    <Grid RowDefinitions="Auto,*">
-                        <TextBlock Grid.Row="0" Text="Log" FontWeight="Bold" Foreground="White" Margin="10,8,10,4"/>
-                        <ScrollViewer Grid.Row="1" Margin="10,0,10,10">
-                            <TextBlock Text="{Binding ExecutionLog}" Foreground="#D4D4D4" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap"/>
-                        </ScrollViewer>
                     </Grid>
                 </Border>
             </Grid>

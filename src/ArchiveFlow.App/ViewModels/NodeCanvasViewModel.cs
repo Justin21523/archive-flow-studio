@@ -39,6 +39,11 @@ public partial class NodeCanvasViewModel : ObservableObject
     [ObservableProperty] private Avalonia.Media.Imaging.Bitmap? _selectedFileThumbnail;
     [ObservableProperty] private string _selectedFilePreviewText = string.Empty;
     [ObservableProperty] private NodeViewModel? _selectedNode;
+    [ObservableProperty] private double _canvasViewportCenterX = 1500;
+    [ObservableProperty] private double _canvasViewportCenterY = 1000;
+
+    private const double NodeDefaultWidth = 200;
+    private const double NodeDefaultHeight = 130;
     private PortViewModel? _connectingSourcePort;
 
     public NodeCanvasViewModel(
@@ -82,25 +87,33 @@ public partial class NodeCanvasViewModel : ObservableObject
     }
 
     // --- Node Commands ---
-    [RelayCommand] private void AddAllFiles() => AddNodeInternal("All Files", "AllFiles", 60, 100);
-    [RelayCommand] private void AddFilterTxt() => AddNodeInternal("Filter: .txt", "FilterTxt", 300, 120);
-    [RelayCommand] private void AddFilterMd() => AddNodeInternal("Filter: .md", "FilterMd", 300, 280);
-    [RelayCommand] private void AddResultTable() => AddNodeInternal("Result Table", "Result", 520, 180);
-    [RelayCommand] private void AddTagAI() => AddNodeInternal("Add Tag: AI", "AddTagAI", 300, 120);
-    [RelayCommand] private void AddSubjectCS() => AddNodeInternal("Set Subject: CS", "SetSubjectCS", 300, 280);
-    [RelayCommand] private void AddFullTextSearch() => AddNodeInternal("Full Text Search", "FullTextSearch", 300, 440, "test");
-    [RelayCommand] private void AddExportCsv() => AddNodeInternal("Export CSV", "ExportCsv", 520, 120, "output.csv");
-    [RelayCommand] private void AddExportJson() => AddNodeInternal("Export JSON", "ExportJson", 520, 300, "output.json");
-    [RelayCommand] private void AddDynamicRule() => AddNodeInternal("Dynamic Rule", "DynamicRule", 400, 300, "type:.png");
-
-    private void AddNodeInternal(string title, string type, double x, double y, string defaultParam = "")
+    [RelayCommand] private void AddAllFiles() => AddNodeInternal("All Files", "AllFiles");
+    [RelayCommand] private void AddFilterTxt() => AddNodeInternal("Filter: .txt", "FilterTxt");
+    [RelayCommand] private void AddFilterMd() => AddNodeInternal("Filter: .md", "FilterMd");
+    [RelayCommand] private void AddDynamicRule() => AddNodeInternal("Dynamic Rule", "DynamicRule", "type:.png");
+    [RelayCommand] private void AddTagAI() => AddNodeInternal("Add Tag: AI", "AddTagAI");
+    [RelayCommand] private void AddSubjectCS() => AddNodeInternal("Set Subject: CS", "SetSubjectCS");
+    [RelayCommand] private void AddFullTextSearch() => AddNodeInternal("Full Text Search", "FullTextSearch", "test");
+    [RelayCommand] private void AddExportCsv() => AddNodeInternal("Export CSV", "ExportCsv", "output.csv");
+    [RelayCommand] private void AddExportJson() => AddNodeInternal("Export JSON", "ExportJson", "output.json");
+    [RelayCommand] private void AddResultTable() => AddNodeInternal("Result Table", "Result");
+    
+    public void UpdateCanvasViewportCenter(double centerX, double centerY)
     {
-        double offsetX = (Nodes.Count % 5) * 30;
-        var newNode = new NodeViewModel(title, type, x + offsetX, y + offsetX, defaultParam);
+        CanvasViewportCenterX = Math.Max(NodeDefaultWidth / 2, centerX);
+        CanvasViewportCenterY = Math.Max(NodeDefaultHeight / 2, centerY);
+    }
+
+    private void AddNodeInternal(string title, string type, string defaultParam = "")
+    {
+        var x = Math.Max(0, CanvasViewportCenterX - NodeDefaultWidth / 2);
+        var y = Math.Max(0, CanvasViewportCenterY - NodeDefaultHeight / 2);
+        var newNode = new NodeViewModel(title, type, x, y, defaultParam);
         Nodes.Add(newNode);
+        SelectNode(newNode);
         RecalculateLayout();
-        ExecutionLog += $"Added: {title}\n";
-        _logger.LogInformation("Added node: {Title}", title);
+        ExecutionLog += $"Added at canvas center: {title}\n";
+        _logger.LogInformation("Added node at canvas center: {Title}", title);
     }
 
     public void SelectNode(NodeViewModel? node)

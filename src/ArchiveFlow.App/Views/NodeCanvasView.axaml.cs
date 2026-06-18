@@ -55,6 +55,7 @@ public partial class NodeCanvasView : UserControl
         {
             _viewModel.Nodes.CollectionChanged += OnNodesCollectionChanged;
             _viewModel.Edges.CollectionChanged += OnEdgesCollectionChanged;
+            UpdateCanvasViewportCenter();
             foreach (var edge in _viewModel.Edges)
             {
                 AddEdgeView(edge);
@@ -64,6 +65,42 @@ public partial class NodeCanvasView : UserControl
                 AddNodeView(node);
             }
         }
+    }
+
+    private void CanvasViewport_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateCanvasViewportCenter();
+    }
+
+    private void CanvasViewport_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        UpdateCanvasViewportCenter();
+    }
+
+    private void UpdateCanvasViewportCenter()
+    {
+        if (ViewModel == null) return;
+
+        var viewportWidth = CanvasViewport.Viewport.Width;
+        var viewportHeight = CanvasViewport.Viewport.Height;
+
+        if (double.IsNaN(viewportWidth) || viewportWidth <= 0)
+        {
+            viewportWidth = CanvasViewport.Bounds.Width;
+        }
+
+        if (double.IsNaN(viewportHeight) || viewportHeight <= 0)
+        {
+            viewportHeight = CanvasViewport.Bounds.Height;
+        }
+
+        var centerX = CanvasViewport.Offset.X + viewportWidth / 2;
+        var centerY = CanvasViewport.Offset.Y + viewportHeight / 2;
+
+        centerX = Math.Clamp(centerX, 0, MainCanvas.Bounds.Width > 0 ? MainCanvas.Bounds.Width : MainCanvas.Width);
+        centerY = Math.Clamp(centerY, 0, MainCanvas.Bounds.Height > 0 ? MainCanvas.Bounds.Height : MainCanvas.Height);
+
+        ViewModel.UpdateCanvasViewportCenter(centerX, centerY);
     }
 
     private void OnNodesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -302,6 +339,7 @@ public partial class NodeCanvasView : UserControl
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+        UpdateCanvasViewportCenter();
         this.Focus();
     }
 }

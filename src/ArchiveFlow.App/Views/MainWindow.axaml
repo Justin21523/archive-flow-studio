@@ -4,18 +4,44 @@
         xmlns:views="using:ArchiveFlow.App.Views"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="800"
         x:Class="ArchiveFlow.App.Views.MainWindow"
         x:DataType="vm:NodeCanvasViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="ArchiveFlow Studio - Node Canvas"
-        Width="1280" Height="800">
+        Title="ArchiveFlow Studio"
+        Width="1200" Height="800">
 
-    <Design.DataContext>
-        <vm:NodeCanvasViewModel/>
-    </Design.DataContext>
+    <DockPanel>
+        <!-- Top Menu Bar -->
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="File">
+                <MenuItem Header="New Workflow" Command="{Binding SaveWorkflowCommand}"/> <!-- Reusing for demo -->
+                <Separator/>
+                <MenuItem Header="Exit" Click="Exit_Click"/>
+            </MenuItem>
+            <MenuItem Header="Edit">
+                <MenuItem Header="Delete Selected Node" Command="{Binding DeleteSelectedNodeCommand}" InputGesture="Delete"/>
+            </MenuItem>
+            <MenuItem Header="View">
+                <MenuItem Header="Dashboard" Click="GoToDashboard_Click"/>
+                <MenuItem Header="Workspace" Click="GoToWorkspace_Click"/>
+            </MenuItem>
+            <MenuItem Header="Workflow">
+                <MenuItem Header="Execute" Command="{Binding ExecuteWorkflowCommand}" InputGesture="F5"/>
+                <Separator/>
+                <MenuItem Header="Save" Command="{Binding SaveWorkflowCommand}"/>
+                <MenuItem Header="Load" Command="{Binding LoadWorkflowCommand}"/>
+            </MenuItem>
+        </Menu>
 
-    <!-- Embed the NodeCanvasView directly -->
-    <views:NodeCanvasView />
-
+        <!-- Main Content Area with Tabs -->
+        <TabControl x:Name="MainTabControl" Background="#1E1E1E">
+            <TabItem Header="Dashboard" IsSelected="True">
+                <views:DashboardView/>
+            </TabItem>
+            <TabItem Header="Workspace">
+                <views:NodeCanvasView/>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
 </Window>
