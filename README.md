@@ -8,6 +8,18 @@ A professional desktop application for managing, organizing, and analyzing digit
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
 ![.NET](https://img.shields.io/badge/.NET-9.0-purple.svg)
 
+## 🖼️ System Showcase
+
+![ArchiveFlow Studio Main Canvas](data/screenshot.png)
+
+## 🏆 Portfolio Significance & Outcomes
+
+This project showcases several advanced software engineering and desktop application design patterns:
+- **Custom UI Canvas Control**: Features a sophisticated node-based workflow editor built from scratch in Avalonia UI. It manages mouse pan/zoom matrices, node selection states, dynamic port connection rendering using Bezier curves, and drag-and-drop mechanics.
+- **Modular Plugin System**: Implements a clean, interface-driven DLL plugin architecture using dynamic assembly reflection. This allows third-party developers to extend the node library with custom actions and file processor components.
+- **Optimized Local Persistence**: Leverages a highly organized SQLite database schema paired with Dapper ORM. Includes SQLite FTS5 for lightning-fast full-text search capability across metadata fields and contents.
+- **Multithreaded Execution Pipeline**: Employs an asynchronous, non-blocking background queue to execute heavy file indexing, thumbnail generation (using ImageSharp), and metadata extraction tasks smoothly.
+
 ##  Features
 
 ### Core Functionality
