@@ -1,40 +1,29 @@
-using System.Collections.ObjectModel;
+using System.Collections.Generic;
 using ArchiveFlow.Application.Nodes.Definitions;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ArchiveFlow.App.ViewModels;
 
 /// <summary>
-/// Represents a configurable parameter for a node (e.g., Dropdown, Number, Text).
+/// Represents a parameter value for one node instance on the canvas.
 /// </summary>
-public partial class NodeParameterViewModel : ObservableObject
+public partial class NodeParameterInstanceViewModel : ObservableObject
 {
-    public string Key { get; }
-    [ObservableProperty] private string _label = string.Empty;
-    [ObservableProperty] private string _value = string.Empty;
-    [ObservableProperty] private string _type = "Text"; // Text, Number, Dropdown, Toggle
+    public NodeParameterDefinition Definition { get; }
 
-    // For Dropdown type
-    public ObservableCollection<string> Options { get; } = new();
+    public string Key => Definition.Key;
+    public string DisplayName => Definition.DisplayName;
+    public NodeParameterControlType ControlType => Definition.ControlType;
+    public string ControlTypeLabel => Definition.ControlType.ToString();
+    public bool IsRequired => Definition.IsRequired;
+    public IReadOnlyList<string> Options => Definition.Options;
 
-    public NodeParameterViewModel(string label, string type, string defaultValue = "")
+    [ObservableProperty]
+    private string _value = string.Empty;
+
+    public NodeParameterInstanceViewModel(NodeParameterDefinition definition)
     {
-        Key = label;
-        Label = label;
-        Type = type;
-        Value = defaultValue;
-    }
-
-    public NodeParameterViewModel(ParameterDefinition definition)
-    {
-        Key = definition.Key;
-        Label = definition.Label;
-        Type = definition.Type;
+        Definition = definition;
         Value = definition.DefaultValue;
-
-        foreach (var option in definition.Options)
-        {
-            Options.Add(option);
-        }
     }
 }

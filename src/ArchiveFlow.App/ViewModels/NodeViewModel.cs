@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using ArchiveFlow.Application.Nodes.Definitions;
@@ -36,7 +37,7 @@ public partial class NodeViewModel : ObservableObject
     public string AccentColor => Definition.AccentColor;
     
     // Dynamic parameters generated from Definition
-    public ObservableCollection<NodeParameterViewModel> Parameters { get; } = new();
+    public ObservableCollection<NodeParameterInstanceViewModel> Parameters { get; } = new();
     public PortViewModel InputPort { get; }
     public PortViewModel OutputPort { get; }
     public ObservableCollection<FileRecord> OutputFiles { get; } = new();
@@ -70,12 +71,12 @@ public partial class NodeViewModel : ObservableObject
         // Initialize Parameters based on Definition
         foreach (var paramDef in definition.Parameters)
         {
-            Parameters.Add(new NodeParameterViewModel(paramDef));
+            Parameters.Add(new NodeParameterInstanceViewModel(paramDef));
         }
 
         // Initialize Ports (Simplified: 1 Input, 1 Output for now)
-        var inPortDef = definition.Ports.FirstOrDefault(p => p.IsInput);
-        var outPortDef = definition.Ports.FirstOrDefault(p => !p.IsInput);
+        var inPortDef = definition.InputPorts.FirstOrDefault();
+        var outPortDef = definition.OutputPorts.FirstOrDefault();
 
         InputPort = new PortViewModel(this, true, 0, 50, inPortDef != null);
         OutputPort = new PortViewModel(this, false, 200, 50, outPortDef != null);
@@ -87,19 +88,20 @@ public partial class NodeViewModel : ObservableObject
     }
     // Helper methods for adding parameters
     public void AddTextParam(string label, string defaultValue = "") => 
-        Parameters.Add(new NodeParameterViewModel(label, "Text", defaultValue));
+        Parameters.Add(CreateParameter(label, NodeParameterControlType.Text, defaultValue));
     
     public void AddDropdownParam(string label, params string[] options)
     {
-        var p = new NodeParameterViewModel(label, "Dropdown");
-        foreach(var opt in options) p.Options.Add(opt);
-        if(options.Length > 0) p.Value = options[0];
-        Parameters.Add(p);
+        Parameters.Add(CreateParameter(
+            label,
+            NodeParameterControlType.Dropdown,
+            options.FirstOrDefault() ?? string.Empty,
+            options));
     }
 
     public void AddNumberParam(string label, string defaultValue = "0")
     {
-        Parameters.Add(new NodeParameterViewModel(label, "Number", defaultValue));
+        Parameters.Add(CreateParameter(label, NodeParameterControlType.Number, defaultValue));
     }
 
     public string ParameterValue
@@ -166,20 +168,20 @@ public partial class NodeViewModel : ObservableObject
     {
         var category = nodeType switch
         {
-            "AllFiles" or "FolderScanner" => NodeCategory.Source,
-            "AddTagAI" or "SetSubjectCS" or "AutoTag" or "CreateRelationship" => NodeCategory.Action,
-            "Result" or "ExportCsv" or "ExportJson" or "ExportDcXml" => NodeCategory.Output,
-            "FindRelated" => NodeCategory.Relationship,
-            _ => NodeCategory.Processor
+            "AllFiles" or "FolderScanner" => NodeCategory.Sources,
+            "AddTagAI" or "SetSubjectCS" or "AutoTag" => NodeCategory.MetadataActions,
+            "CreateRelationship" or "FindRelated" => NodeCategory.Relationships,
+            "Result" or "ExportCsv" or "ExportJson" or "ExportDcXml" => NodeCategory.Outputs,
+            _ => NodeCategory.QueryFilters
         };
 
         var accentColor = category switch
         {
-            NodeCategory.Source => "#4CAF50",
-            NodeCategory.Processor => "#2196F3",
-            NodeCategory.Action => "#FF9800",
-            NodeCategory.Output => "#9C27B0",
-            NodeCategory.Relationship => "#FF9800",
+            NodeCategory.Sources => "#4CAF50",
+            NodeCategory.QueryFilters => "#2196F3",
+            NodeCategory.MetadataActions => "#FF9800",
+            NodeCategory.Outputs => "#9C27B0",
+            NodeCategory.Relationships => "#FF9800",
             _ => "#607D8B"
         };
 
@@ -189,15 +191,39 @@ public partial class NodeViewModel : ObservableObject
             DisplayName = title,
             Description = nodeType,
             Category = category,
-            SubCategory = string.Empty,
+            Subcategory = string.Empty,
             IsPreviewOnly = nodeType is "AllFiles" or "FolderScanner" or "FilterTxt" or "FilterMd" or "DynamicRule" or "FullTextSearch" or "ConditionBranch" or "MergeBranches" or "Result",
             AccentColor = accentColor,
-            Ports =
+            InputPorts = new[]
             {
-                new PortDefinition { Name = "Input", DataType = PortDataType.FileSet, IsInput = true },
-                new PortDefinition { Name = "Output", DataType = PortDataType.FileSet, IsInput = false }
+                new NodePortDefinition { Name = "Input", DataType = NodePortDataType.FileSet }
+            },
+            OutputPorts = new[]
+            {
+                new NodePortDefinition { Name = "Output", DataType = NodePortDataType.FileSet }
             }
         };
+    }
+
+    private static NodeParameterInstanceViewModel CreateParameter(
+        string label,
+        NodeParameterControlType controlType,
+        string defaultValue,
+        IReadOnlyList<string>? options = null)
+    {
+        var key = new string(label
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant)
+            .ToArray());
+
+        return new NodeParameterInstanceViewModel(new NodeParameterDefinition
+        {
+            Key = string.IsNullOrWhiteSpace(key) ? "parameter" : key,
+            DisplayName = label,
+            ControlType = controlType,
+            DefaultValue = defaultValue,
+            Options = options ?? Array.Empty<string>()
+        });
     }
 }
 

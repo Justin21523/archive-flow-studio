@@ -8,6 +8,8 @@ namespace ArchiveFlow.App.ViewModels;
 /// </summary>
 public partial class MainWindowViewModel : ObservableObject
 {
+    public NodeCanvasViewModel NodeCanvas { get; }
+
     [ObservableProperty]
     private string _title = "ArchiveFlow Studio";
 
@@ -17,8 +19,11 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private string _databasePath = string.Empty;
 
-    public MainWindowViewModel(IDatabaseConnectionFactory databaseConnectionFactory)
+    public MainWindowViewModel(
+        IDatabaseConnectionFactory databaseConnectionFactory,
+        NodeCanvasViewModel nodeCanvas)
     {
         DatabasePath = databaseConnectionFactory.DatabasePath;
+        NodeCanvas = nodeCanvas;
     }
 }

@@ -1,38 +1,48 @@
-using System.Collections.Generic;
-using System.Linq;
 using ArchiveFlow.Application.Nodes.Definitions;
 
 namespace ArchiveFlow.Application.Services;
 
 /// <summary>
-/// Global registry for all available node definitions.
+/// Stores all available node definitions.
 /// </summary>
-public class NodeRegistry
+public sealed class NodeRegistry
 {
-    private readonly Dictionary<string, NodeDefinition> _definitions = new();
+    private readonly List<NodeDefinition> _definitions;
+
+    public NodeRegistry()
+    {
+        _definitions = BuiltInNodeDefinitions.CreateAll()
+            .OrderBy(x => x.Category)
+            .ThenBy(x => x.Subcategory)
+            .ThenBy(x => x.DisplayName)
+            .ToList();
+    }
+
+    public IReadOnlyList<NodeDefinition> GetAll()
+    {
+        return _definitions
+            .OrderBy(x => x.Category)
+            .ThenBy(x => x.Subcategory)
+            .ThenBy(x => x.DisplayName)
+            .ToList();
+    }
+
+    public NodeDefinition? FindByType(string nodeType)
+    {
+        return _definitions.FirstOrDefault(x => x.NodeType == nodeType);
+    }
 
     public void Register(NodeDefinition definition)
     {
-        _definitions[definition.NodeType] = definition;
-    }
+        ArgumentNullException.ThrowIfNull(definition);
 
-    public NodeDefinition? GetDefinition(string nodeType)
-    {
-        return _definitions.TryGetValue(nodeType, out var def) ? def : null;
-    }
+        var existingIndex = _definitions.FindIndex(x => x.NodeType == definition.NodeType);
+        if (existingIndex >= 0)
+        {
+            _definitions[existingIndex] = definition;
+            return;
+        }
 
-    public IEnumerable<NodeDefinition> GetAllDefinitions()
-    {
-        return _definitions.Values;
-    }
-
-    public IEnumerable<NodeDefinition> GetByCategory(NodeCategory category)
-    {
-        return _definitions.Values.Where(d => d.Category == category);
-    }
-
-    public IEnumerable<NodeDefinition> GetDefinitionsByCategory(string category)
-    {
-        return _definitions.Values.Where(d => d.Category.ToString().Equals(category, System.StringComparison.OrdinalIgnoreCase));
+        _definitions.Add(definition);
     }
 }

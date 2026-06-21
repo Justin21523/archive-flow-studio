@@ -1,85 +1,92 @@
-using System;
-using System.Collections.Generic;
-
 namespace ArchiveFlow.Application.Nodes.Definitions;
 
-/// <summary>
-/// Defines the high-level categories for nodes in the library.
-/// </summary>
-public enum NodeCategory 
-{ 
-    Source, 
-    Processor, 
-    Action, 
-    Output, 
-    Relationship 
-}
+using ArchiveFlow.Application.Nodes;
 
 /// <summary>
-/// Defines the data type that can flow through node ports.
+/// Represents the major group shown in the Node Library.
 /// </summary>
-public enum PortDataType 
-{ 
-    FileSet, 
-    SingleFile, 
-    StringValue, 
-    NumericValue, 
-    BooleanValue, 
-    Any 
-}
-
-/// <summary>
-/// Represents an input or output port on a node.
-/// </summary>
-public class PortDefinition
+public enum NodeCategory
 {
-    public string Name { get; set; } = string.Empty;
-    public PortDataType DataType { get; set; }
-    public bool IsInput { get; set; }
+    Sources,
+    QueryFilters,
+    Search,
+    LogicAndSetOperations,
+    MetadataActions,
+    FileActions,
+    CreateAndTemplate,
+    Relationships,
+    IndexingAndExtraction,
+    Outputs
 }
 
 /// <summary>
-/// Represents a configurable parameter for a node (e.g., Text, Dropdown).
+/// Represents the type of data flowing through a node port.
 /// </summary>
-public class ParameterDefinition
+public enum NodePortDataType
 {
-    public string Key { get; set; } = string.Empty;
-    public string Label { get; set; } = string.Empty;
-    public string Type { get; set; } = "Text"; // Text, Number, Dropdown, Toggle
-    public string DefaultValue { get; set; } = string.Empty;
-    public List<string> Options { get; set; } = new(); // Used for Dropdown
+    FileSet,
+    SingleFile,
+    MetadataSet,
+    StringValue,
+    NumericValue,
+    BooleanValue,
+    GraphData,
+    Any
 }
 
 /// <summary>
-/// The core metadata definition for a Node. 
-/// Acts as the single source of truth for UI rendering and Engine instantiation.
+/// Represents a parameter control type used by the Inspector.
 /// </summary>
-public class NodeDefinition
+public enum NodeParameterControlType
 {
-    public string NodeType { get; set; } = string.Empty; // Unique ID (e.g., "AllFiles", "FilterTxt")
-    public string DisplayName { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public NodeCategory Category { get; set; }
-    public string SubCategory { get; set; } = string.Empty; // e.g., "Filters", "Metadata"
-    
-    /// <summary>
-    /// True for Query/Preview nodes, False for Action/Mutation nodes.
-    /// </summary>
-    public bool IsPreviewOnly { get; set; } 
-    
-    public string AccentColor { get; set; } = "#007ACC"; // Theme color for the node card
-    
-    public List<PortDefinition> Ports { get; set; } = new();
-    public List<ParameterDefinition> Parameters { get; set; } = new();
-    
-    /// <summary>
-    /// Factory method to instantiate the backend node using DI.
-    /// </summary>
-    public Func<IServiceProvider, IArchiveNode> Factory { get; set; } = null!;
-    
-    /// <summary>
-    /// Optional action to inject UI parameters into the backend node after instantiation.
-    /// Keeps Clean Architecture intact (Application layer doesn't need to know about UI ViewModels).
-    /// </summary>
-    public Action<IArchiveNode, Dictionary<string, string>>? ApplyParameters { get; set; }
+    Text,
+    Number,
+    Boolean,
+    Dropdown,
+    Date
+}
+
+/// <summary>
+/// Describes a node input or output port.
+/// </summary>
+public sealed class NodePortDefinition
+{
+    public string Name { get; init; } = string.Empty;
+    public NodePortDataType DataType { get; init; }
+}
+
+/// <summary>
+/// Describes a configurable parameter for a node.
+/// </summary>
+public sealed class NodeParameterDefinition
+{
+    public string Key { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public NodeParameterControlType ControlType { get; init; } = NodeParameterControlType.Text;
+    public string DefaultValue { get; init; } = string.Empty;
+    public IReadOnlyList<string> Options { get; init; } = Array.Empty<string>();
+    public bool IsRequired { get; init; }
+}
+
+/// <summary>
+/// Defines a node type. This is the single source of truth for the Node Library,
+/// node cards, and the Inspector.
+/// </summary>
+public sealed class NodeDefinition
+{
+    public string NodeType { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public NodeCategory Category { get; init; }
+    public string Subcategory { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public string Icon { get; init; } = "◆";
+    public string AccentColor { get; init; } = "#607D8B";
+    public bool IsPreviewOnly { get; init; } = true;
+    public bool IsActionNode { get; init; }
+
+    public IReadOnlyList<NodePortDefinition> InputPorts { get; init; } = Array.Empty<NodePortDefinition>();
+    public IReadOnlyList<NodePortDefinition> OutputPorts { get; init; } = Array.Empty<NodePortDefinition>();
+    public IReadOnlyList<NodeParameterDefinition> Parameters { get; init; } = Array.Empty<NodeParameterDefinition>();
+
+    public Func<IServiceProvider, IArchiveNode>? Factory { get; init; }
 }

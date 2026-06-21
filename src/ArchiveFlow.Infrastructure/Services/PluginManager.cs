@@ -83,14 +83,18 @@ public class PluginManager
                         NodeType = definition.NodeType,
                         DisplayName = definition.DisplayName,
                         Description = $"Plugin node from {plugin.PluginName}",
-                        Category = NodeCategory.Action,
-                        SubCategory = definition.Category,
+                        Category = NodeCategory.MetadataActions,
+                        Subcategory = definition.Category,
                         IsPreviewOnly = false,
+                        IsActionNode = true,
                         AccentColor = "#607D8B",
-                        Ports =
+                        InputPorts = new[]
                         {
-                            new PortDefinition { Name = "Input", DataType = PortDataType.FileSet, IsInput = true },
-                            new PortDefinition { Name = "Output", DataType = PortDataType.FileSet, IsInput = false }
+                            new NodePortDefinition { Name = "Input", DataType = NodePortDataType.FileSet }
+                        },
+                        OutputPorts = new[]
+                        {
+                            new NodePortDefinition { Name = "Output", DataType = NodePortDataType.FileSet }
                         },
                         Factory = _ => definition.Factory()
                     });

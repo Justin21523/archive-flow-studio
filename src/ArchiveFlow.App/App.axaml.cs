@@ -2,7 +2,7 @@ using System;
 using ArchiveFlow.App.ViewModels;
 using ArchiveFlow.App.Views;
 using ArchiveFlow.Application.Interfaces;
-using ArchiveFlow.Application;
+using ArchiveFlow.Application.Services;
 using ArchiveFlow.Infrastructure.Database;
 using ArchiveFlow.Infrastructure.Database.Repositories;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -67,9 +67,11 @@ public partial class App : Avalonia.Application
             .AddLogging(builder => builder.AddFluentMigratorConsole());
 
         services.AddSingleton<IDatabaseInitializer, DatabaseInitializer>();
-
         services.AddSingleton<IFileRepository, SqliteFileRepository>();
 
+        services.AddSingleton<NodeRegistry>();
+
+        services.AddTransient<NodeCanvasViewModel>();
         services.AddTransient<MainWindowViewModel>();
     }
 }
