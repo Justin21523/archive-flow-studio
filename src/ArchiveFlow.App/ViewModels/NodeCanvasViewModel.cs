@@ -14,8 +14,10 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using IFileRepository = ArchiveFlow.Application.Interfaces.IFileRepository;
 using IMetadataRepository = ArchiveFlow.Application.Interfaces.IMetadataRepository;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input.Platform;
 using Avalonia.Threading;
 namespace ArchiveFlow.App.ViewModels;
 
@@ -32,7 +34,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     private readonly IMetadataRepository _metadataRepository;
     private readonly MetadataEditorViewModelFactory _metadataEditorViewModelFactory;
     private readonly IMockArchiveSeeder _mockArchiveSeeder;
-
+    private readonly IFileSystemInteractionService _fileSystemInteractionService;
     public ObservableCollection<MetadataValue> SelectedFileMetadata { get; } = new();
     
     [ObservableProperty]
@@ -49,7 +51,16 @@ public partial class NodeCanvasViewModel : ObservableObject
     public ObservableCollection<EdgeViewModel> Edges { get; } = new();
     public ObservableCollection<NodeParameterInstanceViewModel> InspectorParameters { get; } = new();
     public ObservableCollection<FileRecord> ResultFiles { get; } = new();
+    public ObservableCollection<ResultFileRowViewModel> ResultRows { get; } = new();
 
+    [ObservableProperty]
+    private ResultFileRowViewModel? _selectedResult;
+
+    [ObservableProperty]
+    private string _resultCountText = "0 files";
+
+    [ObservableProperty]
+    private string _selectedFilePath = string.Empty;
     [ObservableProperty]
     private NodeInstanceViewModel? _selectedNode;
 
@@ -119,13 +130,15 @@ public partial class NodeCanvasViewModel : ObservableObject
         IFileRepository fileRepository,
         IMetadataRepository metadataRepository,
         MetadataEditorViewModelFactory metadataEditorViewModelFactory,
-        IMockArchiveSeeder mockArchiveSeeder)
+        IMockArchiveSeeder mockArchiveSeeder,
+        IFileSystemInteractionService fileSystemInteractionService)
     {
         _nodeRegistry = nodeRegistry;
         _fileRepository = fileRepository;
         _metadataRepository = metadataRepository;
         _metadataEditorViewModelFactory = metadataEditorViewModelFactory;
         _mockArchiveSeeder = mockArchiveSeeder;
+        _fileSystemInteractionService = fileSystemInteractionService;
 
         PendingChanges.CollectionChanged += OnPendingChangesCollectionChanged;
 
@@ -150,12 +163,46 @@ public partial class NodeCanvasViewModel : ObservableObject
         StatusMessage = $"Added node: {definition.DisplayName}";
     }
 
+    partial void OnSelectedResultChanged(ResultFileRowViewModel? value)
+    {
+        SelectedFile = value?.FileRecord;
+    }
+
     partial void OnSelectedFileChanged(FileRecord? value)
     {
         OnPropertyChanged(nameof(HasSelectedFile));
+
         OpenMetadataEditorCommand.NotifyCanExecuteChanged();
+        OpenSelectedFileCommand.NotifyCanExecuteChanged();
+        RevealSelectedFileCommand.NotifyCanExecuteChanged();
+        CopySelectedFilePathCommand.NotifyCanExecuteChanged();
+
+        SelectedFilePath = value?.FilePath ?? string.Empty;
 
         _ = LoadSelectedFileMetadataAsync(value);
+    }
+
+    private async Task SetResultFilesAsync(IEnumerable<FileRecord> files)
+    {
+        ResultFiles.Clear();
+        ResultRows.Clear();
+
+        var fileList = files.ToList();
+
+        foreach (var file in fileList)
+        {
+            ResultFiles.Add(file);
+
+            var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
+            ResultRows.Add(ResultFileRowViewModel.Create(file, metadata.ToList()));
+        }
+
+        ResultCountText = $"{ResultRows.Count} files";
+
+        if (SelectedResult == null || !ResultRows.Any(x => x.Id == SelectedResult.Id))
+        {
+            SelectedResult = ResultRows.FirstOrDefault();
+        }
     }
 
     private bool CanOpenMetadataEditor()
@@ -464,10 +511,7 @@ public partial class NodeCanvasViewModel : ObservableObject
 
             if (nodeOutputs.TryGetValue(finalNode.InstanceId, out var resultFiles))
             {
-                foreach (var file in resultFiles)
-                {
-                    ResultFiles.Add(file);
-                }
+                await SetResultFilesAsync(resultFiles);
             }
 
             ExecutionLog += $"Workflow preview completed. Result files: {ResultFiles.Count}. Pending changes: {PendingChanges.Count}.\n";
@@ -529,16 +573,95 @@ public partial class NodeCanvasViewModel : ObservableObject
 
     private async Task RefreshResultFilesFromRepositoryAsync()
     {
-        ResultFiles.Clear();
-
         var files = await _fileRepository.GetAllAsync();
+        await SetResultFilesAsync(files.Take(500));
+    }
 
-        foreach (var file in files.Take(500))
+    [RelayCommand]
+    private async Task RefreshResultsAsync()
+    {
+        try
         {
-            ResultFiles.Add(file);
+            StatusMessage = "Refreshing result table...";
+            await RefreshResultFilesFromRepositoryAsync();
+
+            ExecutionLog += $"Results refreshed. Rows: {ResultRows.Count}\n";
+            StatusMessage = $"Results refreshed. Rows: {ResultRows.Count}";
+        }
+        catch (Exception ex)
+        {
+            ExecutionLog += $"Refresh failed: {ex.Message}\n";
+            StatusMessage = $"Refresh failed: {ex.Message}";
+        }
+    }
+    private bool CanUseSelectedFile()
+    {
+        return SelectedFile != null;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanUseSelectedFile))]
+    private async Task OpenSelectedFileAsync()
+    {
+        if (SelectedFile == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _fileSystemInteractionService.OpenFileAsync(SelectedFile.FilePath);
+            ExecutionLog += $"Opened file: {SelectedFile.FileName}\n";
+            StatusMessage = $"Opened file: {SelectedFile.FileName}";
+        }
+        catch (Exception ex)
+        {
+            ExecutionLog += $"Open file failed: {ex.Message}\n";
+            StatusMessage = $"Open file failed: {ex.Message}";
         }
     }
 
+    [RelayCommand(CanExecute = nameof(CanUseSelectedFile))]
+    private async Task RevealSelectedFileAsync()
+    {
+        if (SelectedFile == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _fileSystemInteractionService.RevealInFileExplorerAsync(SelectedFile.FilePath);
+            ExecutionLog += $"Revealed file location: {SelectedFile.FileName}\n";
+            StatusMessage = $"Revealed file location: {SelectedFile.FileName}";
+        }
+        catch (Exception ex)
+        {
+            ExecutionLog += $"Reveal file failed: {ex.Message}\n";
+            StatusMessage = $"Reveal file failed: {ex.Message}";
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanUseSelectedFile))]
+    private async Task CopySelectedFilePathAsync()
+    {
+        if (SelectedFile == null)
+        {
+            return;
+        }
+
+        if (Avalonia.Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop ||
+            desktop.MainWindow?.Clipboard == null)
+        {
+            StatusMessage = "Clipboard is not available.";
+            return;
+        }
+
+        await desktop.MainWindow.Clipboard.SetTextAsync(SelectedFile.FilePath);
+
+        ExecutionLog += $"Copied path: {SelectedFile.FilePath}\n";
+        StatusMessage = "File path copied.";
+    }
+    
     [RelayCommand]
     private async Task ApplyPendingChangesAsync()
     {

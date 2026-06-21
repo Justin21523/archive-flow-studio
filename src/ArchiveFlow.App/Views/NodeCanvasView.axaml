@@ -11,7 +11,7 @@
                 Background="#252526"
                 Padding="12">
             <!-- tool bar -->
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                 <StackPanel>
                     <TextBlock Text="Node Workspace"
                             Foreground="White"
@@ -30,40 +30,46 @@
                         Padding="12,6"/>
 
                 <Button Grid.Column="2"
+                        Content="Refresh Results"
+                        Command="{Binding RefreshResultsCommand}"
+                        Margin="0,0,8,0"
+                        Padding="12,6"/>
+
+                <Button Grid.Column="3"
                         Content="Execute Workflow"
                         Command="{Binding ExecuteWorkflowCommand}"
                         Margin="0,0,8,0"
                         Padding="12,6"/>
 
-                <Button Grid.Column="3"
+                <Button Grid.Column="4"
                         Content="Apply Pending Changes"
                         Command="{Binding ApplyPendingChangesCommand}"
                         IsEnabled="{Binding HasPendingChanges}"
                         Margin="0,0,8,0"
                         Padding="12,6"/>
 
-                <Button Grid.Column="4"
+                <Button Grid.Column="5"
                         Content="Discard Preview"
                         Command="{Binding DiscardPendingChangesCommand}"
                         IsEnabled="{Binding HasPendingChanges}"
                         Margin="0,0,8,0"
                         Padding="12,6"/>
 
-                <Button Grid.Column="5"
+                <Button Grid.Column="6"
                         Content="Delete Node"
                         Command="{Binding DeleteSelectedNodeCommand}"
                         IsEnabled="{Binding HasSelectedNode}"
                         Margin="0,0,8,0"
                         Padding="12,6"/>
 
-                <Button Grid.Column="6"
+                <Button Grid.Column="7"
                         Content="Delete Connection"
                         Command="{Binding DeleteSelectedEdgeCommand}"
                         IsEnabled="{Binding HasSelectedEdge}"
                         Margin="0,0,8,0"
                         Padding="12,6"/>
 
-                <Button Grid.Column="7"
+                <Button Grid.Column="8"
                         Content="Clear Canvas"
                         Command="{Binding ClearCanvasCommand}"
                         Padding="12,6"/>
@@ -457,30 +463,78 @@
                                     MinHeight="90"/>
                         </StackPanel>
                     </Border>
-                    <!-- Selected File Metadata Entry -->
+                    <!-- Selected File Panel -->
                     <Border Background="#1E1E1E"
                             CornerRadius="8"
                             Padding="14"
                             Margin="0,0,0,14">
                         <StackPanel>
-                            <TextBlock Text="Selected File"
-                                    Foreground="#BBBBBB"
-                                    FontWeight="Bold"
-                                    FontSize="12"
-                                    Margin="0,0,0,10"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0"
+                                        Text="Selected File"
+                                        Foreground="#BBBBBB"
+                                        FontWeight="Bold"
+                                        FontSize="12"
+                                        Margin="0,0,0,10"/>
+
+                                <TextBlock Grid.Column="1"
+                                        Text="{Binding ResultCountText}"
+                                        Foreground="#888888"
+                                        FontSize="11"/>
+                            </Grid>
 
                             <TextBlock Text="{Binding SelectedFileSummary}"
                                     Foreground="White"
                                     FontSize="12"
                                     TextWrapping="Wrap"
+                                    Margin="0,0,0,8"/>
+
+                            <TextBox Text="{Binding SelectedFilePath}"
+                                    IsReadOnly="True"
+                                    TextWrapping="Wrap"
+                                    Background="#111111"
+                                    Foreground="#999999"
+                                    BorderThickness="0"
+                                    FontFamily="Consolas"
+                                    FontSize="10"
+                                    MinHeight="48"
                                     Margin="0,0,0,12"/>
 
-                            <Button Content="Open Metadata Editor"
-                                    Command="{Binding OpenMetadataEditorCommand}"
-                                    IsEnabled="{Binding HasSelectedFile}"
-                                    HorizontalAlignment="Stretch"
-                                    Padding="12,8"
-                                    Margin="0,0,0,12"/>
+                            <Grid ColumnDefinitions="*,*"
+                                RowDefinitions="Auto,Auto"
+                                Margin="0,0,0,12">
+                                <Button Grid.Row="0"
+                                        Grid.Column="0"
+                                        Content="Open File"
+                                        Command="{Binding OpenSelectedFileCommand}"
+                                        IsEnabled="{Binding HasSelectedFile}"
+                                        Padding="10,7"
+                                        Margin="0,0,6,8"/>
+
+                                <Button Grid.Row="0"
+                                        Grid.Column="1"
+                                        Content="Reveal"
+                                        Command="{Binding RevealSelectedFileCommand}"
+                                        IsEnabled="{Binding HasSelectedFile}"
+                                        Padding="10,7"
+                                        Margin="6,0,0,8"/>
+
+                                <Button Grid.Row="1"
+                                        Grid.Column="0"
+                                        Content="Copy Path"
+                                        Command="{Binding CopySelectedFilePathCommand}"
+                                        IsEnabled="{Binding HasSelectedFile}"
+                                        Padding="10,7"
+                                        Margin="0,0,6,0"/>
+
+                                <Button Grid.Row="1"
+                                        Grid.Column="1"
+                                        Content="Metadata Editor"
+                                        Command="{Binding OpenMetadataEditorCommand}"
+                                        IsEnabled="{Binding HasSelectedFile}"
+                                        Padding="10,7"
+                                        Margin="6,0,0,0"/>
+                            </Grid>
 
                             <TextBlock Text="Metadata Preview"
                                     Foreground="#888888"
@@ -512,7 +566,7 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
-                    </Border>                    
+                    </Border>
                     <!-- Pending Changes -->
                     <Border Background="#1E1E1E"
                             CornerRadius="8"
@@ -645,45 +699,87 @@
                     BorderThickness="0,1,0,0"
                     Padding="12">
                 <Grid RowDefinitions="Auto,*">
-                    <TextBlock Text="Result Files"
-                            Foreground="White"
-                            FontSize="14"
-                            FontWeight="Bold"
-                            Margin="0,0,0,8"/>
+                    <Grid ColumnDefinitions="*,Auto"
+                        Margin="0,0,0,8">
+                        <TextBlock Grid.Column="0"
+                                Text="Result Files"
+                                Foreground="White"
+                                FontSize="14"
+                                FontWeight="Bold"/>
 
-                    <ListBox Grid.Row="1"
-                            ItemsSource="{Binding ResultFiles}"
-                            SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
+                        <TextBlock Grid.Column="1"
+                                Text="{Binding ResultCountText}"
+                                Foreground="#AAAAAA"
+                                FontSize="12"
+                                VerticalAlignment="Center"/>
+                    </Grid>
+                    <DataGrid Grid.Row="1"
+                            ItemsSource="{Binding ResultRows}"
+                            SelectedItem="{Binding SelectedResult, Mode=TwoWay}"
+                            AutoGenerateColumns="False"
+                            IsReadOnly="True"
+                            CanUserSortColumns="True"
+                            GridLinesVisibility="Horizontal"
+                            HeadersVisibility="Column"
                             Background="#111111"
-                            BorderThickness="0">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Grid ColumnDefinitions="140,*,70"
-                                    Margin="6">
-                                    <TextBlock Grid.Column="0"
-                                            Text="{Binding ArchiveId}"
-                                            Foreground="#4FC3F7"
-                                            FontSize="11"
-                                            TextTrimming="CharacterEllipsis"/>
+                            Foreground="White"
+                            BorderThickness="0"
+                            RowHeight="32">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Archive ID"
+                                                Binding="{Binding ArchiveId}"
+                                                Width="150"/>
 
-                                    <TextBlock Grid.Column="1"
-                                            Text="{Binding FileName}"
-                                            Foreground="White"
-                                            FontSize="11"
-                                            TextTrimming="CharacterEllipsis"
-                                            Margin="8,0"/>
+                            <DataGridTextColumn Header="Filename"
+                                                Binding="{Binding FileName}"
+                                                Width="220"/>
 
-                                    <TextBlock Grid.Column="2"
-                                            Text="{Binding FileExtension}"
-                                            Foreground="#AAAAAA"
-                                            FontSize="11"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                            <DataGridTextColumn Header="Ext"
+                                                Binding="{Binding FileExtension}"
+                                                Width="70"/>
+
+                            <DataGridTextColumn Header="Type"
+                                                Binding="{Binding FileType}"
+                                                Width="95"/>
+
+                            <DataGridTextColumn Header="Size"
+                                                Binding="{Binding FileSizeText}"
+                                                SortMemberPath="FileSizeBytes"
+                                                Width="90"/>
+
+                            <DataGridTextColumn Header="Status"
+                                                Binding="{Binding StatusText}"
+                                                Width="95"/>
+
+                            <DataGridTextColumn Header="Subject"
+                                                Binding="{Binding Subject}"
+                                                Width="150"/>
+
+                            <DataGridTextColumn Header="Tags"
+                                                Binding="{Binding Tags}"
+                                                Width="180"/>
+
+                            <DataGridTextColumn Header="Project"
+                                                Binding="{Binding Project}"
+                                                Width="170"/>
+
+                            <DataGridTextColumn Header="Completeness"
+                                                Binding="{Binding MetadataCompletenessText}"
+                                                SortMemberPath="MetadataCompleteness"
+                                                Width="115"/>
+
+                            <DataGridTextColumn Header="Imported"
+                                                Binding="{Binding ImportedAtText}"
+                                                Width="135"/>
+
+                            <DataGridTextColumn Header="Path"
+                                                Binding="{Binding FilePath}"
+                                                Width="360"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
                 </Grid>
             </Border>
-         </Grid>
+        </Grid>
       </Border>
     </Grid>
 </UserControl>

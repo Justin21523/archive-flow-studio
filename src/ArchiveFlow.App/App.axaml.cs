@@ -7,6 +7,7 @@ using ArchiveFlow.Infrastructure.Database;
 using ArchiveFlow.Infrastructure.Database.Repositories;
 using ArchiveFlow.Infrastructure.Hashing;
 using ArchiveFlow.Infrastructure.MockData;
+using ArchiveFlow.Infrastructure.FileSystem;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using FluentMigrator.Runner;
@@ -75,7 +76,8 @@ public partial class App : Avalonia.Application
         services.AddSingleton<NodeRegistry>();
         services.AddSingleton<MetadataEditorViewModelFactory>();
         services.AddSingleton<IMockArchiveSeeder, MockArchiveSeeder>();
-
+        services.AddSingleton<IFileSystemInteractionService, DesktopFileSystemInteractionService>();
+        
         services.AddTransient<NodeCanvasViewModel>();
         services.AddTransient<MainWindowViewModel>();
     }
