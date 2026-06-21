@@ -24,7 +24,13 @@ public class SetSubjectNode : IArchiveNode
 
     public async Task ExecuteAsync(NodeExecutionContext context, CancellationToken cancellationToken = default)
     {
-        var field = await _metadataRepo.GetOrCreateFieldAsync("subject", "Subject");
+        var field = await _metadataRepo.GetOrCreateFieldAsync(
+            "subject",
+            "Subject",
+            "String",
+            "Descriptive",
+            isRequired: true,
+            cancellationToken: cancellationToken);
         if (field == null) return;
 
         foreach (var file in context.CurrentFileSet.ToList())

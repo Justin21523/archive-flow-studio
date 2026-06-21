@@ -243,7 +243,11 @@ public class MockDataService : IMockDataService
 
     private async Task AddMetadataAsync(string fileId, string fieldName, string value)
     {
-        var field = await _metadataRepository.GetOrCreateFieldAsync(fieldName, fieldName);
+        var field = await _metadataRepository.GetOrCreateFieldAsync(
+            fieldName,
+            fieldName,
+            "String",
+            fieldName.Equals("tag", StringComparison.OrdinalIgnoreCase) ? "Personal" : "Basic");
         if (field != null)
         {
             await _metadataRepository.AddMetadataValueAsync(fileId, field.Id, value);

@@ -10,16 +10,16 @@
                 Grid.Row="0"
                 Background="#252526"
                 Padding="12">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto">
                 <StackPanel>
                     <TextBlock Text="Node Workspace"
-                               Foreground="White"
-                               FontSize="18"
-                               FontWeight="Bold"/>
+                            Foreground="White"
+                            FontSize="18"
+                            FontWeight="Bold"/>
                     <TextBlock Text="{Binding StatusMessage}"
-                               Foreground="#AAAAAA"
-                               FontSize="12"
-                               Margin="0,4,0,0"/>
+                            Foreground="#AAAAAA"
+                            FontSize="12"
+                            Margin="0,4,0,0"/>
                 </StackPanel>
 
                 <Button Grid.Column="1"
@@ -29,20 +29,34 @@
                         Padding="12,6"/>
 
                 <Button Grid.Column="2"
+                        Content="Apply Pending Changes"
+                        Command="{Binding ApplyPendingChangesCommand}"
+                        IsEnabled="{Binding HasPendingChanges}"
+                        Margin="0,0,8,0"
+                        Padding="12,6"/>
+
+                <Button Grid.Column="3"
+                        Content="Discard Preview"
+                        Command="{Binding DiscardPendingChangesCommand}"
+                        IsEnabled="{Binding HasPendingChanges}"
+                        Margin="0,0,8,0"
+                        Padding="12,6"/>
+
+                <Button Grid.Column="4"
                         Content="Delete Node"
                         Command="{Binding DeleteSelectedNodeCommand}"
                         IsEnabled="{Binding HasSelectedNode}"
                         Margin="0,0,8,0"
                         Padding="12,6"/>
 
-                <Button Grid.Column="3"
+                <Button Grid.Column="5"
                         Content="Delete Connection"
                         Command="{Binding DeleteSelectedEdgeCommand}"
                         IsEnabled="{Binding HasSelectedEdge}"
                         Margin="0,0,8,0"
                         Padding="12,6"/>
 
-                <Button Grid.Column="4"
+                <Button Grid.Column="6"
                         Content="Clear Canvas"
                         Command="{Binding ClearCanvasCommand}"
                         Padding="12,6"/>
@@ -317,7 +331,7 @@
                                                         BorderBrush="#444444"
                                                         BorderThickness="1"
                                                         Padding="8,6"
-                                                        Watermark="Enter value"/>
+                                                        PlaceholderText="Enter value"/>
 
                                                 <!-- Number parameters -->
                                                 <NumericUpDown Value="{Binding NumericValue, Mode=TwoWay}"
@@ -436,7 +450,106 @@
                                     MinHeight="90"/>
                         </StackPanel>
                     </Border>
+                    <!-- Pending Changes -->
+                    <Border Background="#1E1E1E"
+                            CornerRadius="8"
+                            Padding="14"
+                            Margin="0,0,0,14">
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0"
+                                        Text="Pending Changes"
+                                        Foreground="#BBBBBB"
+                                        FontWeight="Bold"
+                                        FontSize="12"
+                                        Margin="0,0,0,10"/>
 
+                                <TextBlock Grid.Column="1"
+                                        Text="{Binding PendingChanges.Count}"
+                                        Foreground="#FFC107"
+                                        FontWeight="Bold"
+                                        FontSize="12"/>
+                            </Grid>
+
+                            <TextBlock Text="Action nodes only generate preview changes. Nothing is written until Apply Pending Changes is clicked."
+                                    Foreground="#888888"
+                                    FontSize="11"
+                                    TextWrapping="Wrap"
+                                    Margin="0,0,0,10"/>
+
+                            <ListBox ItemsSource="{Binding PendingChanges}"
+                                    Background="#111111"
+                                    BorderThickness="0"
+                                    MaxHeight="260">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:PendingChangeViewModel">
+                                        <Border Background="#2D2D30"
+                                                CornerRadius="6"
+                                                Padding="10"
+                                                Margin="0,0,0,8">
+                                            <StackPanel>
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Grid.Column="0"
+                                                            Text="{Binding FileName}"
+                                                            Foreground="White"
+                                                            FontWeight="SemiBold"
+                                                            FontSize="12"
+                                                            TextTrimming="CharacterEllipsis"/>
+
+                                                    <TextBlock Grid.Column="1"
+                                                            Text="{Binding Status}"
+                                                            Foreground="#FFC107"
+                                                            FontSize="11"
+                                                            Margin="8,0,0,0"/>
+                                                </Grid>
+
+                                                <TextBlock Text="{Binding SourceNodeTitle}"
+                                                        Foreground="#4FC3F7"
+                                                        FontSize="11"
+                                                        Margin="0,4,0,0"/>
+
+                                                <TextBlock Text="{Binding ChangeKind}"
+                                                        Foreground="#AAAAAA"
+                                                        FontSize="11"
+                                                        Margin="0,4,0,0"/>
+
+                                                <Grid ColumnDefinitions="70,*,70,*"
+                                                    Margin="0,6,0,0">
+                                                    <TextBlock Grid.Column="0"
+                                                            Text="Old"
+                                                            Foreground="#777777"
+                                                            FontSize="10"/>
+
+                                                    <TextBlock Grid.Column="1"
+                                                            Text="{Binding OldValue}"
+                                                            Foreground="#CCCCCC"
+                                                            FontSize="10"
+                                                            TextTrimming="CharacterEllipsis"/>
+
+                                                    <TextBlock Grid.Column="2"
+                                                            Text="New"
+                                                            Foreground="#777777"
+                                                            FontSize="10"
+                                                            Margin="8,0,0,0"/>
+
+                                                    <TextBlock Grid.Column="3"
+                                                            Text="{Binding NewValue}"
+                                                            Foreground="#8BC34A"
+                                                            FontSize="10"
+                                                            TextTrimming="CharacterEllipsis"/>
+                                                </Grid>
+
+                                                <TextBlock Text="{Binding SafetyLevel}"
+                                                        Foreground="#888888"
+                                                        FontSize="10"
+                                                        Margin="0,6,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </Border>
                     <!-- Execution Log -->
                     <Border Background="#1E1E1E"
                             CornerRadius="8"

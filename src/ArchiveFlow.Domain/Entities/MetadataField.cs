@@ -7,18 +7,16 @@ namespace ArchiveFlow.Domain.Entities;
 public class MetadataField
 {
     public int Id { get; set; }
+
     public string FieldName { get; set; } = string.Empty;
+
     public string DisplayName { get; set; } = string.Empty;
-    public string FieldType { get; set; } = "String"; // String, Integer, Date, Boolean
-    
-    /// <summary>
-    /// Category used for grouping in the Metadata Editor UI.
-    /// Examples: "Basic", "Descriptive", "Personal", "Technical"
-    /// </summary>
+
+    public string FieldType { get; set; } = "String";
+
     public string Category { get; set; } = "Basic";
 
-    /// <summary>
-    /// Indicates if this field is required for metadata completeness calculation.
-    /// </summary>
-    public bool IsRequired { get; set; } = false;
+    public bool IsRequired { get; set; }
+
+    public int SortOrder { get; set; }
 }

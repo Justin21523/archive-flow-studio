@@ -58,7 +58,11 @@ public class LocalKeywordTaggingService : IAutoTaggingService
             // Apply detected tags to metadata
             if (detectedTags.Count > 0)
             {
-                var tagField = await _metadataRepository.GetOrCreateFieldAsync("tag", "Tag");
+                var tagField = await _metadataRepository.GetOrCreateFieldAsync(
+                    "tag",
+                    "Tag",
+                    "String",
+                    "Personal");
                 if (tagField != null)
                 {
                     foreach (var tag in detectedTags)

@@ -41,7 +41,12 @@ public class AddTagNode : IActionNode
 
     public async Task ApplyAsync(NodeExecutionContext context, CancellationToken cancellationToken = default)
     {
-        var field = await _metadataRepo.GetOrCreateFieldAsync("tag", "Tag");
+        var field = await _metadataRepo.GetOrCreateFieldAsync(
+            "tag",
+            "Tag",
+            "String",
+            "Personal",
+            cancellationToken: cancellationToken);
         if (field == null) return;
 
         foreach (var file in context.CurrentFileSet.ToList())

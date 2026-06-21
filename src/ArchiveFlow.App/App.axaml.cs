@@ -68,7 +68,7 @@ public partial class App : Avalonia.Application
 
         services.AddSingleton<IDatabaseInitializer, DatabaseInitializer>();
         services.AddSingleton<IFileRepository, SqliteFileRepository>();
-
+        services.AddSingleton<IMetadataRepository, SqliteMetadataRepository>();    
         services.AddSingleton<NodeRegistry>();
 
         services.AddTransient<NodeCanvasViewModel>();

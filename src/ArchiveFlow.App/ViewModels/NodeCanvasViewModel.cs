@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Threading.Tasks;
 using ArchiveFlow.Application.Nodes.Definitions;
@@ -10,6 +11,8 @@ using ArchiveFlow.Domain.Enums;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using IFileRepository = ArchiveFlow.Application.Interfaces.IFileRepository;
+using IMetadataRepository = ArchiveFlow.Application.Interfaces.IMetadataRepository;
+using Avalonia.Controls;
 
 namespace ArchiveFlow.App.ViewModels;
 
@@ -22,9 +25,10 @@ public partial class NodeCanvasViewModel : ObservableObject
 {
     private readonly NodeRegistry _nodeRegistry;
     private readonly IFileRepository _fileRepository;
-
     private PortInstanceViewModel? _connectingSourcePort;
-
+    private readonly IMetadataRepository _metadataRepository;
+    public ObservableCollection<PendingChangeViewModel> PendingChanges { get; } = new();
+    public bool HasPendingChanges => PendingChanges.Count > 0;
     public ObservableCollection<NodeLibraryCategoryViewModel> NodeLibraryCategories { get; } = new();
     public ObservableCollection<NodeInstanceViewModel> Nodes { get; } = new();
     public ObservableCollection<EdgeViewModel> Edges { get; } = new();
@@ -95,13 +99,22 @@ public partial class NodeCanvasViewModel : ObservableObject
 
     public NodeCanvasViewModel(
         NodeRegistry nodeRegistry,
-        IFileRepository fileRepository)
+        IFileRepository fileRepository,
+        IMetadataRepository metadataRepository)
     {
         _nodeRegistry = nodeRegistry;
         _fileRepository = fileRepository;
+        _metadataRepository = metadataRepository;
 
+        PendingChanges.CollectionChanged += OnPendingChangesCollectionChanged;
+        
         BuildNodeLibrary();
         AddStarterNodes();
+    }
+    
+    private void OnPendingChangesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasPendingChanges));
     }
 
     public void AddNodeFromDefinition(NodeDefinition definition)
@@ -292,7 +305,8 @@ public partial class NodeCanvasViewModel : ObservableObject
 
         IsExecuting = true;
         ResultFiles.Clear();
-        ExecutionLog = "Executing workflow...\n";
+        PendingChanges.Clear();
+        ExecutionLog = "Executing workflow preview...\n";
 
         try
         {
@@ -315,7 +329,20 @@ public partial class NodeCanvasViewModel : ObservableObject
                 node.Status = "Running";
                 node.SetRunStats(inputFiles.Count, 0);
 
-                var outputFiles = await ExecuteNodeAsync(node, inputFiles);
+                List<FileRecord> outputFiles;
+
+                if (node.Definition.IsActionNode)
+                {
+                    outputFiles = await PreviewActionNodeAsync(node, inputFiles);
+                    node.Status = $"Preview ready ({outputFiles.Count})";
+                    ExecutionLog += $"[ACTION PREVIEW] {node.Title}: generated pending changes from {inputFiles.Count} files.\n";
+                }
+                else
+                {
+                    outputFiles = await ExecuteNodeAsync(node, inputFiles);
+                    node.Status = $"Success ({outputFiles.Count})";
+                    ExecutionLog += $"[QUERY] {node.Title}: input {inputFiles.Count}, output {outputFiles.Count}.\n";
+                }
 
                 node.SetRunStats(inputFiles.Count, outputFiles.Count);
                 node.RefreshPreview();
@@ -323,17 +350,6 @@ public partial class NodeCanvasViewModel : ObservableObject
                 if (SelectedNode == node)
                 {
                     RefreshInspector(node);
-                }
-                
-                if (node.Definition.IsActionNode)
-                {
-                    node.Status = $"Preview ready ({outputFiles.Count})";
-                    ExecutionLog += $"[ACTION PREVIEW] {node.Title}: would affect {outputFiles.Count} files.\n";
-                }
-                else
-                {
-                    node.Status = $"Success ({outputFiles.Count})";
-                    ExecutionLog += $"[QUERY] {node.Title}: input {inputFiles.Count}, output {outputFiles.Count}.\n";
                 }
 
                 nodeOutputs[node.InstanceId] = outputFiles;
@@ -350,17 +366,405 @@ public partial class NodeCanvasViewModel : ObservableObject
                 }
             }
 
-            ExecutionLog += $"Workflow completed. Result files: {ResultFiles.Count}\n";
-            StatusMessage = $"Workflow executed. Result files: {ResultFiles.Count}";
+            ExecutionLog += $"Workflow preview completed. Result files: {ResultFiles.Count}. Pending changes: {PendingChanges.Count}.\n";
+            StatusMessage = $"Preview completed. Result files: {ResultFiles.Count}, pending changes: {PendingChanges.Count}";
         }
         catch (Exception ex)
         {
             ExecutionLog += $"Error: {ex.Message}\n";
-            StatusMessage = $"Workflow execution failed: {ex.Message}";
+            StatusMessage = $"Workflow preview failed: {ex.Message}";
         }
         finally
         {
             IsExecuting = false;
+        }
+    }
+    [RelayCommand]
+    private async Task ApplyPendingChangesAsync()
+    {
+        if (PendingChanges.Count == 0)
+        {
+            StatusMessage = "No pending changes to apply.";
+            return;
+        }
+
+        var applicableChanges = PendingChanges
+            .Where(change => change.CanApply && !change.IsApplied)
+            .ToList();
+
+        if (applicableChanges.Count == 0)
+        {
+            StatusMessage = "No applicable pending changes. Preview-only and skipped changes were not applied.";
+            ExecutionLog += "No applicable pending changes.\n";
+            return;
+        }
+
+        var appliedCount = 0;
+
+        foreach (var change in applicableChanges)
+        {
+            try
+            {
+                switch (change.ChangeKind)
+                {
+                    case "MetadataAddValue":
+                        await _metadataRepository.AddMetadataValueIfMissingAsync(
+                            change.FileRecord.Id,
+                            change.FieldName,
+                            change.DisplayName,
+                            change.FieldType,
+                            change.Category,
+                            change.NewValue);
+                        change.MarkApplied();
+                        appliedCount++;
+                        break;
+
+                    case "MetadataSetValue":
+                        await _metadataRepository.SetMetadataValueAsync(
+                            change.FileRecord.Id,
+                            change.FieldName,
+                            change.DisplayName,
+                            change.FieldType,
+                            change.Category,
+                            change.NewValue);
+                        change.MarkApplied();
+                        appliedCount++;
+                        break;
+
+                    case "MetadataDeleteValue":
+                        await _metadataRepository.DeleteMetadataValueAsync(
+                            change.FileRecord.Id,
+                            change.FieldName,
+                            change.OldValue);
+                        change.MarkApplied();
+                        appliedCount++;
+                        break;
+
+                    case "FileStatusUpdate":
+                        if (Enum.TryParse<FileStatus>(change.NewValue, ignoreCase: true, out var newStatus))
+                        {
+                            change.FileRecord.UpdateStatus(newStatus);
+                            await _fileRepository.SaveAsync(change.FileRecord);
+                            change.MarkApplied();
+                            appliedCount++;
+                        }
+                        else
+                        {
+                            change.MarkFailed($"Invalid status: {change.NewValue}");
+                        }
+
+                        break;
+
+                    default:
+                        change.MarkSkipped("No Apply handler");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                change.MarkFailed(ex.Message);
+                ExecutionLog += $"Apply failed for {change.FileName}: {ex.Message}\n";
+            }
+        }
+
+        StatusMessage = $"Applied {appliedCount} pending changes.";
+        ExecutionLog += $"Applied {appliedCount} pending changes.\n";
+        OnPropertyChanged(nameof(HasPendingChanges));
+    }
+
+    [RelayCommand]
+    private void DiscardPendingChanges()
+    {
+        var count = PendingChanges.Count;
+
+        PendingChanges.Clear();
+
+        StatusMessage = $"Discarded {count} pending changes.";
+        ExecutionLog += $"Discarded {count} pending changes.\n";
+    }
+
+    private async Task<List<FileRecord>> PreviewActionNodeAsync(
+        NodeInstanceViewModel node,
+        List<FileRecord> inputFiles)
+    {
+        switch (node.NodeType)
+        {
+            case "metadata.add_tag":
+                await PreviewAddTagAsync(node, inputFiles);
+                return inputFiles;
+
+            case "metadata.remove_tag":
+                await PreviewRemoveTagAsync(node, inputFiles);
+                return inputFiles;
+
+            case "metadata.set_subject":
+                await PreviewSetMetadataAsync(
+                    node,
+                    inputFiles,
+                    fieldName: "subject",
+                    displayName: "Subject",
+                    category: "Descriptive Metadata",
+                    value: node.GetParameterValue("subject"));
+                return inputFiles;
+
+            case "metadata.set_project":
+                await PreviewSetMetadataAsync(
+                    node,
+                    inputFiles,
+                    fieldName: "project",
+                    displayName: "Project",
+                    category: "Personal Knowledge",
+                    value: node.GetParameterValue("project"));
+                return inputFiles;
+
+            case "metadata.set_reading_status":
+                await PreviewSetMetadataAsync(
+                    node,
+                    inputFiles,
+                    fieldName: "reading_status",
+                    displayName: "Reading Status",
+                    category: "Personal Knowledge",
+                    value: node.GetParameterValue("readingStatus", "To Read"));
+                return inputFiles;
+
+            case "metadata.set_importance":
+                await PreviewSetMetadataAsync(
+                    node,
+                    inputFiles,
+                    fieldName: "importance",
+                    displayName: "Importance",
+                    category: "Personal Knowledge",
+                    value: node.GetParameterValue("importance", "Normal"));
+                return inputFiles;
+
+            case "metadata.set_status":
+                PreviewSetFileStatus(node, inputFiles);
+                return inputFiles;
+
+            case "metadata.generate_archive_id":
+                PreviewBlockedAction(
+                    node,
+                    inputFiles,
+                    "Archive ID generation is preview-only in Phase 0.5. Apply will be added after archive ID rules are centralized.");
+                return inputFiles;
+
+            case "metadata.validate_metadata":
+                PreviewBlockedAction(
+                    node,
+                    inputFiles,
+                    "Metadata validation is analysis-only. It does not write changes.");
+                return inputFiles;
+
+            case "file.copy_to_archive":
+            case "file.move_file":
+            case "file.rename_file":
+            case "file.open_file":
+            case "file.reveal":
+                PreviewBlockedAction(
+                    node,
+                    inputFiles,
+                    "File-system actions are blocked from Apply in Phase 0.5. Physical files will not be modified.");
+                return inputFiles;
+
+            case "output.export_csv":
+            case "output.export_json":
+            case "output.export_dublin_core":
+            case "output.smart_collection":
+                PreviewBlockedAction(
+                    node,
+                    inputFiles,
+                    "Output actions are preview-only in Phase 0.5. Export Apply will be implemented later.");
+                return inputFiles;
+
+            default:
+                PreviewBlockedAction(
+                    node,
+                    inputFiles,
+                    "This action node does not have an Apply handler yet.");
+                return inputFiles;
+        }
+    }
+
+    private async Task PreviewAddTagAsync(
+        NodeInstanceViewModel node,
+        IReadOnlyList<FileRecord> files)
+    {
+        var tag = node.GetParameterValue("tag", "AI").Trim();
+
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            PreviewBlockedAction(node, files, "Tag value is empty.");
+            return;
+        }
+
+        foreach (var file in files)
+        {
+            var alreadyExists = await _metadataRepository.HasMetadataValueAsync(
+                file.Id,
+                "tag",
+                tag);
+
+            PendingChanges.Add(new PendingChangeViewModel(
+                fileRecord: file,
+                sourceNodeTitle: node.Title,
+                changeKind: "MetadataAddValue",
+                fieldName: "tag",
+                displayName: "Tag",
+                fieldType: "String",
+                category: "Personal Knowledge",
+                oldValue: alreadyExists ? tag : string.Empty,
+                newValue: tag,
+                safetyLevel: "Metadata only",
+                canApply: !alreadyExists));
+
+            if (alreadyExists)
+            {
+                PendingChanges.Last().MarkSkipped("Already has value");
+            }
+        }
+    }
+
+    private async Task PreviewRemoveTagAsync(
+        NodeInstanceViewModel node,
+        IReadOnlyList<FileRecord> files)
+    {
+        var tag = node.GetParameterValue("tag").Trim();
+
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            PreviewBlockedAction(node, files, "Tag value is empty.");
+            return;
+        }
+
+        foreach (var file in files)
+        {
+            var exists = await _metadataRepository.HasMetadataValueAsync(
+                file.Id,
+                "tag",
+                tag);
+
+            PendingChanges.Add(new PendingChangeViewModel(
+                fileRecord: file,
+                sourceNodeTitle: node.Title,
+                changeKind: "MetadataDeleteValue",
+                fieldName: "tag",
+                displayName: "Tag",
+                fieldType: "String",
+                category: "Personal Knowledge",
+                oldValue: exists ? tag : string.Empty,
+                newValue: string.Empty,
+                safetyLevel: "Metadata only",
+                canApply: exists));
+
+            if (!exists)
+            {
+                PendingChanges.Last().MarkSkipped("Value not found");
+            }
+        }
+    }
+
+    private async Task PreviewSetMetadataAsync(
+        NodeInstanceViewModel node,
+        IReadOnlyList<FileRecord> files,
+        string fieldName,
+        string displayName,
+        string category,
+        string value)
+    {
+        value = value.Trim();
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            PreviewBlockedAction(node, files, $"{displayName} value is empty.");
+            return;
+        }
+
+        foreach (var file in files)
+        {
+            var oldValue = await _metadataRepository.GetFirstMetadataValueAsync(
+                file.Id,
+                fieldName);
+
+            var alreadySame = string.Equals(
+                oldValue ?? string.Empty,
+                value,
+                StringComparison.OrdinalIgnoreCase);
+
+            PendingChanges.Add(new PendingChangeViewModel(
+                fileRecord: file,
+                sourceNodeTitle: node.Title,
+                changeKind: "MetadataSetValue",
+                fieldName: fieldName,
+                displayName: displayName,
+                fieldType: "String",
+                category: category,
+                oldValue: oldValue ?? string.Empty,
+                newValue: value,
+                safetyLevel: "Metadata only",
+                canApply: !alreadySame));
+
+            if (alreadySame)
+            {
+                PendingChanges.Last().MarkSkipped("Already has value");
+            }
+        }
+    }
+
+    private void PreviewSetFileStatus(
+        NodeInstanceViewModel node,
+        IReadOnlyList<FileRecord> files)
+    {
+        var statusText = node.GetParameterValue("status", "Archived");
+
+        foreach (var file in files)
+        {
+            var oldStatus = file.GetStatus().ToString();
+            var alreadySame = string.Equals(
+                oldStatus,
+                statusText,
+                StringComparison.OrdinalIgnoreCase);
+
+            PendingChanges.Add(new PendingChangeViewModel(
+                fileRecord: file,
+                sourceNodeTitle: node.Title,
+                changeKind: "FileStatusUpdate",
+                fieldName: "status",
+                displayName: "Status",
+                fieldType: "Enum",
+                category: "Basic",
+                oldValue: oldStatus,
+                newValue: statusText,
+                safetyLevel: "Database record only",
+                canApply: !alreadySame));
+
+            if (alreadySame)
+            {
+                PendingChanges.Last().MarkSkipped("Already has status");
+            }
+        }
+    }
+
+    private void PreviewBlockedAction(
+        NodeInstanceViewModel node,
+        IReadOnlyList<FileRecord> files,
+        string reason)
+    {
+        foreach (var file in files)
+        {
+            PendingChanges.Add(new PendingChangeViewModel(
+                fileRecord: file,
+                sourceNodeTitle: node.Title,
+                changeKind: "BlockedPreviewOnly",
+                fieldName: "-",
+                displayName: "-",
+                fieldType: "-",
+                category: "-",
+                oldValue: string.Empty,
+                newValue: reason,
+                safetyLevel: "Blocked",
+                canApply: false));
+
+            PendingChanges.Last().MarkSkipped("Preview only");
         }
     }
 

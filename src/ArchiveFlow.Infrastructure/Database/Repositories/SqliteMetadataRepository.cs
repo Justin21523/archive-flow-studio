@@ -1,73 +1,454 @@
-using System;
-using System.Collections.Generic;
 using System.Data;
-using System.IO;
-using System.Threading.Tasks;
-using ArchiveFlow.Application.Interfaces;
-using ArchiveFlow.Domain.Entities;
 using Dapper;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging; 
+using ArchiveFlow.Application.Interfaces;
+using ArchiveFlow.Domain.Entities;
 
 namespace ArchiveFlow.Infrastructure.Database.Repositories;
 
 public class SqliteMetadataRepository : IMetadataRepository
 {
-    private readonly string _connectionString;
+    private readonly IDatabaseConnectionFactory _connectionFactory;
     private readonly ILogger<SqliteMetadataRepository> _logger;
-
-    public SqliteMetadataRepository(ILogger<SqliteMetadataRepository> logger)
+    
+    public SqliteMetadataRepository(
+        IDatabaseConnectionFactory connectionFactory,
+        ILogger<SqliteMetadataRepository> logger)
     {
-        var dbPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "archiveflow.db");
-        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
-        _connectionString = $"Data Source={dbPath};";
+        _connectionFactory = connectionFactory;
         _logger = logger;
     }
 
-    private IDbConnection CreateConnection() => new SqliteConnection(_connectionString);
-
-    public async Task<MetadataField?> GetOrCreateFieldAsync(string fieldName, string displayName, string fieldType = "String", string category = "Basic", bool isRequired = false)
+    public async Task<MetadataField> GetOrCreateFieldAsync(
+        string fieldName,
+        string displayName,
+        string fieldType,
+        string category,
+        bool isRequired = false,
+        CancellationToken cancellationToken = default)
     {
-        using var connection = CreateConnection();
-        var field = await connection.QueryFirstOrDefaultAsync<MetadataField>(
-            "SELECT * FROM metadata_fields WHERE field_name = @FieldName", 
+        fieldName = NormalizeFieldName(fieldName);
+
+        const string selectSql = """
+            SELECT
+                id AS Id,
+                field_name AS FieldName,
+                display_name AS DisplayName,
+                field_type AS FieldType,
+                category AS Category,
+                is_required AS IsRequired,
+                sort_order AS SortOrder
+            FROM metadata_fields
+            WHERE field_name = @FieldName
+            LIMIT 1;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        var existing = await connection.QueryFirstOrDefaultAsync<MetadataField>(
+            selectSql,
             new { FieldName = fieldName });
 
-        if (field != null) return field;
+        if (existing != null)
+        {
+            return existing;
+        }
 
-        await connection.ExecuteAsync(
-            "INSERT INTO metadata_fields (field_name, display_name, field_type, category, is_required) VALUES (@FieldName, @DisplayName, @FieldType, @Category, @IsRequired)",
-            new { FieldName = fieldName, DisplayName = displayName, FieldType = fieldType, Category = category, IsRequired = isRequired });
+        const string insertSql = """
+            INSERT INTO metadata_fields (
+                field_name,
+                display_name,
+                field_type,
+                category,
+                is_required,
+                sort_order
+            )
+            VALUES (
+                @FieldName,
+                @DisplayName,
+                @FieldType,
+                @Category,
+                @IsRequired,
+                @SortOrder
+            );
+            """;
 
-        return await connection.QueryFirstOrDefaultAsync<MetadataField>(
-            "SELECT * FROM metadata_fields WHERE field_name = @FieldName", 
+
+        await connection.ExecuteAsync(insertSql, new
+        {
+            FieldName = fieldName,
+            DisplayName = displayName,
+            FieldType = fieldType,
+            Category = category,
+            IsRequired = isRequired,
+            SortOrder = 0
+        });
+
+        _logger.LogInformation("Created metadata field {FieldName}", fieldName);
+
+        var created = await connection.QueryFirstAsync<MetadataField>(
+            selectSql,
             new { FieldName = fieldName });
+
+        return created;
     }
 
-    public async Task AddMetadataValueAsync(string fileId, int fieldId, string valueText)
+    public async Task<IReadOnlyList<MetadataField>> GetAllFieldsAsync(
+        CancellationToken cancellationToken = default)
     {
-        using var connection = CreateConnection();
-        // Prevent duplicate simple tags/subjects for the same file (Optional logic, simplified here)
-        await connection.ExecuteAsync(
-            "INSERT INTO metadata_values (file_id, field_id, value_text, created_at) VALUES (@FileId, @FieldId, @ValueText, @CreatedAt)",
-            new { FileId = fileId, FieldId = fieldId, ValueText = valueText, CreatedAt = DateTime.UtcNow });
+        const string sql = """
+            SELECT
+                id AS Id,
+                field_name AS FieldName,
+                display_name AS DisplayName,
+                field_type AS FieldType,
+                category AS Category,
+                is_required AS IsRequired,
+                sort_order AS SortOrder
+            FROM metadata_fields
+            ORDER BY category, sort_order, display_name;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var fields = await connection.QueryAsync<MetadataField>(sql);
+
+        return fields.ToList();
     }
 
-    public async Task<IEnumerable<MetadataValue>> GetMetadataByFileIdAsync(string fileId)
+    public async Task AddMetadataValueAsync(
+        string fileId,
+        int fieldId,
+        string valueText,
+        CancellationToken cancellationToken = default)
     {
-        using var connection = CreateConnection();
-        const string sql = @"
-            SELECT mv.id, mv.file_id as FileId, mv.field_id as FieldId, mv.value_text as ValueText, mv.created_at as CreatedAt, 
-                   mf.field_name as FieldName, mf.display_name as DisplayName, mf.category as Category
-            FROM metadata_values mv 
-            JOIN metadata_fields mf ON mv.field_id = mf.id 
-            WHERE mv.file_id = @FileId";
-        return await connection.QueryAsync<MetadataValue>(sql, new { FileId = fileId });
+        const string sql = """
+            INSERT INTO metadata_values (
+                file_id,
+                field_id,
+                value_text,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                @FileId,
+                @FieldId,
+                @ValueText,
+                @CreatedAt,
+                @UpdatedAt
+            );
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(sql, new
+        {
+            FileId = fileId,
+            FieldId = fieldId,
+            ValueText = valueText,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+    }
+           
+    public async Task<IReadOnlyList<MetadataValue>> GetMetadataByFileIdAsync(
+        string fileId,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT
+                mv.id AS Id,
+                mv.file_id AS FileId,
+                mv.field_id AS FieldId,
+                COALESCE(mv.value_text, '') AS ValueText,
+                mv.created_at AS CreatedAt,
+                mv.updated_at AS UpdatedAt,
+                mf.field_name AS FieldName,
+                mf.display_name AS DisplayName,
+                mf.field_type AS FieldType,
+                mf.category AS Category,
+                mf.is_required AS IsRequired
+            FROM metadata_values mv
+            INNER JOIN metadata_fields mf ON mv.field_id = mf.id
+            WHERE mv.file_id = @FileId
+            ORDER BY mf.category, mf.sort_order, mf.display_name;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+        var values = await connection.QueryAsync<MetadataValue>(sql, new { FileId = fileId });
+
+        return values.ToList();
     }
 
-    public async Task<IEnumerable<MetadataField>> GetAllFieldsAsync()
+    public async Task<IReadOnlyList<MetadataValue>> GetMetadataValuesByFieldAsync(
+        string fileId,
+        string fieldName,
+        CancellationToken cancellationToken = default)
     {
-        using var connection = CreateConnection();
-        return await connection.QueryAsync<MetadataField>("SELECT * FROM metadata_fields ORDER BY category, field_name");
+        const string sql = """
+            SELECT
+                mv.id AS Id,
+                mv.file_id AS FileId,
+                mv.field_id AS FieldId,
+                COALESCE(mv.value_text, '') AS ValueText,
+                mv.created_at AS CreatedAt,
+                mv.updated_at AS UpdatedAt,
+                mf.field_name AS FieldName,
+                mf.display_name AS DisplayName,
+                mf.field_type AS FieldType,
+                mf.category AS Category,
+                mf.is_required AS IsRequired
+            FROM metadata_values mv
+            INNER JOIN metadata_fields mf ON mv.field_id = mf.id
+            WHERE mv.file_id = @FileId
+              AND mf.field_name = @FieldName
+            ORDER BY mv.created_at;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        var values = await connection.QueryAsync<MetadataValue>(
+            sql,
+            new
+            {
+                FileId = fileId,
+                FieldName = NormalizeFieldName(fieldName)
+            });
+
+        return values.ToList();
+    }            
+    public async Task<string?> GetFirstMetadataValueAsync(
+        string fileId,
+        string fieldName,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT mv.value_text
+            FROM metadata_values mv
+            INNER JOIN metadata_fields mf ON mv.field_id = mf.id
+            WHERE mv.file_id = @FileId
+              AND mf.field_name = @FieldName
+            ORDER BY mv.created_at
+            LIMIT 1;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        return await connection.QueryFirstOrDefaultAsync<string?>(
+            sql,
+            new
+            {
+                FileId = fileId,
+                FieldName = NormalizeFieldName(fieldName)
+            });
     }
+
+    public async Task<bool> HasMetadataValueAsync(
+        string fileId,
+        string fieldName,
+        string valueText,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT COUNT(*)
+            FROM metadata_values mv
+            INNER JOIN metadata_fields mf ON mv.field_id = mf.id
+            WHERE mv.file_id = @FileId
+              AND mf.field_name = @FieldName
+              AND LOWER(COALESCE(mv.value_text, '')) = LOWER(@ValueText);
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        var count = await connection.ExecuteScalarAsync<int>(
+            sql,
+            new
+            {
+                FileId = fileId,
+                FieldName = NormalizeFieldName(fieldName),
+                ValueText = valueText
+            });
+
+        return count > 0;
+    }
+
+    public async Task SetMetadataValueAsync(
+        string fileId,
+        string fieldName,
+        string displayName,
+        string fieldType,
+        string category,
+        string valueText,
+        bool isRequired = false,
+        CancellationToken cancellationToken = default)
+    {
+        var field = await GetOrCreateFieldAsync(
+            fieldName,
+            displayName,
+            fieldType,
+            category,
+            isRequired,
+            cancellationToken);
+
+        const string findSql = """
+            SELECT id
+            FROM metadata_values
+            WHERE file_id = @FileId
+              AND field_id = @FieldId
+            ORDER BY created_at
+            LIMIT 1;
+            """;
+        using var connection = _connectionFactory.CreateConnection();
+
+        var existingId = await connection.QueryFirstOrDefaultAsync<int?>(
+            findSql,
+            new
+            {
+                FileId = fileId,
+                FieldId = field.Id
+            });
+
+        if (existingId.HasValue)
+        {
+            const string updateSql = """
+                UPDATE metadata_values
+                SET value_text = @ValueText,
+                    updated_at = @UpdatedAt
+                WHERE id = @Id;
+                """;
+
+            await connection.ExecuteAsync(updateSql, new
+            {
+                Id = existingId.Value,
+                ValueText = valueText,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+        else
+        {
+            const string insertSql = """
+                INSERT INTO metadata_values (
+                    file_id,
+                    field_id,
+                    value_text,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    @FileId,
+                    @FieldId,
+                    @ValueText,
+                    @CreatedAt,
+                    @UpdatedAt
+                );
+                """;
+
+            await connection.ExecuteAsync(insertSql, new
+            {
+                FileId = fileId,
+                FieldId = field.Id,
+                ValueText = valueText,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            });
+        }
+    }
+
+    public async Task AddMetadataValueIfMissingAsync(
+        string fileId,
+        string fieldName,
+        string displayName,
+        string fieldType,
+        string category,
+        string valueText,
+        bool isRequired = false,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = await HasMetadataValueAsync(
+            fileId,
+            fieldName,
+            valueText,
+            cancellationToken);
+
+        if (exists)
+        {
+            return;
+        }
+
+        var field = await GetOrCreateFieldAsync(
+            fieldName,
+            displayName,
+            fieldType,
+            category,
+            isRequired,
+            cancellationToken);
+
+        const string insertSql = """
+            INSERT INTO metadata_values (
+                file_id,
+                field_id,
+                value_text,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                @FileId,
+                @FieldId,
+                @ValueText,
+                @CreatedAt,
+                @UpdatedAt
+            );
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        await connection.ExecuteAsync(insertSql, new
+        {
+            FileId = fileId,
+            FieldId = field.Id,
+            ValueText = valueText,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+    }
+
+    public async Task DeleteMetadataValueAsync(
+        string fileId,
+        string fieldName,
+        string? valueText = null,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            DELETE FROM metadata_values
+            WHERE file_id = @FileId
+              AND field_id = (
+                  SELECT id
+                  FROM metadata_fields
+                  WHERE field_name = @FieldName
+                  LIMIT 1
+              )
+              AND (
+                  @ValueText IS NULL
+                  OR value_text = @ValueText
+              );
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        await connection.ExecuteAsync(sql, new
+        {
+            FileId = fileId,
+            FieldName = NormalizeFieldName(fieldName),
+            ValueText = valueText
+        });
+    }
+
+    private static string NormalizeFieldName(string fieldName)
+    {
+        return fieldName
+            .Trim()
+            .Replace(" ", "_")
+            .Replace("-", "_")
+            .ToLowerInvariant();
+    }
+
 }
