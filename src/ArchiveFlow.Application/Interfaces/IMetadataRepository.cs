@@ -18,10 +18,12 @@ public interface IMetadataRepository
     Task<IReadOnlyList<MetadataField>> GetAllFieldsAsync(
         CancellationToken cancellationToken = default);
 
-    Task AddMetadataValueAsync(
-        string fileId,
+    Task UpdateFieldDefinitionAsync(
         int fieldId,
-        string valueText,
+        string displayName,
+        string fieldType,
+        string category,
+        bool isRequired,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<MetadataValue>> GetMetadataByFileIdAsync(
@@ -42,6 +44,21 @@ public interface IMetadataRepository
         string fileId,
         string fieldName,
         string valueText,
+        CancellationToken cancellationToken = default);
+
+    Task<MetadataValue> AddMetadataValueAsync(
+        string fileId,
+        int fieldId,
+        string valueText,
+        CancellationToken cancellationToken = default);
+
+    Task UpdateMetadataValueAsync(
+        int metadataValueId,
+        string valueText,
+        CancellationToken cancellationToken = default);
+
+    Task DeleteMetadataValueByIdAsync(
+        int metadataValueId,
         CancellationToken cancellationToken = default);
 
     Task SetMetadataValueAsync(

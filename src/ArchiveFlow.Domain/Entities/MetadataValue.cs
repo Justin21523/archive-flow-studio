@@ -27,4 +27,6 @@ public sealed class MetadataValue
     public string Category { get; set; } = "Basic";
 
     public bool IsRequired { get; set; }
+
+    public int SortOrder { get; set; }
 }

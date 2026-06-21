@@ -450,6 +450,62 @@
                                     MinHeight="90"/>
                         </StackPanel>
                     </Border>
+                    <!-- Selected File Metadata Entry -->
+                    <Border Background="#1E1E1E"
+                            CornerRadius="8"
+                            Padding="14"
+                            Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock Text="Selected File"
+                                    Foreground="#BBBBBB"
+                                    FontWeight="Bold"
+                                    FontSize="12"
+                                    Margin="0,0,0,10"/>
+
+                            <TextBlock Text="{Binding SelectedFileSummary}"
+                                    Foreground="White"
+                                    FontSize="12"
+                                    TextWrapping="Wrap"
+                                    Margin="0,0,0,12"/>
+
+                            <Button Content="Open Metadata Editor"
+                                    Command="{Binding OpenMetadataEditorCommand}"
+                                    IsEnabled="{Binding HasSelectedFile}"
+                                    HorizontalAlignment="Stretch"
+                                    Padding="12,8"
+                                    Margin="0,0,0,12"/>
+
+                            <TextBlock Text="Metadata Preview"
+                                    Foreground="#888888"
+                                    FontSize="11"
+                                    Margin="0,0,0,8"/>
+
+                            <ItemsControl ItemsSource="{Binding SelectedFileMetadata}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#2D2D30"
+                                                CornerRadius="6"
+                                                Padding="8"
+                                                Margin="0,0,0,6">
+                                            <Grid ColumnDefinitions="120,*">
+                                                <TextBlock Grid.Column="0"
+                                                        Text="{Binding DisplayName}"
+                                                        Foreground="#4FC3F7"
+                                                        FontSize="11"
+                                                        TextTrimming="CharacterEllipsis"/>
+
+                                                <TextBlock Grid.Column="1"
+                                                        Text="{Binding ValueText}"
+                                                        Foreground="White"
+                                                        FontSize="11"
+                                                        TextWrapping="Wrap"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>                    
                     <!-- Pending Changes -->
                     <Border Background="#1E1E1E"
                             CornerRadius="8"
@@ -590,6 +646,7 @@
 
                     <ListBox Grid.Row="1"
                             ItemsSource="{Binding ResultFiles}"
+                            SelectedItem="{Binding SelectedFile, Mode=TwoWay}"
                             Background="#111111"
                             BorderThickness="0">
                         <ListBox.ItemTemplate>

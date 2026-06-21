@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ArchiveFlow.Application.Nodes.Definitions;
 using ArchiveFlow.Application.Services;
+using ArchiveFlow.App.Views;
 using ArchiveFlow.Domain.Entities;
 using ArchiveFlow.Domain.Enums;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -13,7 +14,8 @@ using CommunityToolkit.Mvvm.Input;
 using IFileRepository = ArchiveFlow.Application.Interfaces.IFileRepository;
 using IMetadataRepository = ArchiveFlow.Application.Interfaces.IMetadataRepository;
 using Avalonia.Controls;
-
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
 namespace ArchiveFlow.App.ViewModels;
 
 /// <summary>
@@ -27,6 +29,17 @@ public partial class NodeCanvasViewModel : ObservableObject
     private readonly IFileRepository _fileRepository;
     private PortInstanceViewModel? _connectingSourcePort;
     private readonly IMetadataRepository _metadataRepository;
+    private readonly MetadataEditorViewModelFactory _metadataEditorViewModelFactory;
+
+    public ObservableCollection<MetadataValue> SelectedFileMetadata { get; } = new();
+    
+    [ObservableProperty]
+    private FileRecord? _selectedFile;
+
+    [ObservableProperty]
+    private string _selectedFileSummary = "Select a result file to inspect metadata.";
+
+    public bool HasSelectedFile => SelectedFile != null;
     public ObservableCollection<PendingChangeViewModel> PendingChanges { get; } = new();
     public bool HasPendingChanges => PendingChanges.Count > 0;
     public ObservableCollection<NodeLibraryCategoryViewModel> NodeLibraryCategories { get; } = new();
@@ -100,18 +113,20 @@ public partial class NodeCanvasViewModel : ObservableObject
     public NodeCanvasViewModel(
         NodeRegistry nodeRegistry,
         IFileRepository fileRepository,
-        IMetadataRepository metadataRepository)
+        IMetadataRepository metadataRepository,
+        MetadataEditorViewModelFactory metadataEditorViewModelFactory)
     {
         _nodeRegistry = nodeRegistry;
         _fileRepository = fileRepository;
         _metadataRepository = metadataRepository;
+        _metadataEditorViewModelFactory = metadataEditorViewModelFactory;
 
         PendingChanges.CollectionChanged += OnPendingChangesCollectionChanged;
-        
+
         BuildNodeLibrary();
         AddStarterNodes();
     }
-    
+        
     private void OnPendingChangesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(HasPendingChanges));
@@ -127,6 +142,89 @@ public partial class NodeCanvasViewModel : ObservableObject
         SelectNode(node);
 
         StatusMessage = $"Added node: {definition.DisplayName}";
+    }
+
+    partial void OnSelectedFileChanged(FileRecord? value)
+    {
+        OnPropertyChanged(nameof(HasSelectedFile));
+        OpenMetadataEditorCommand.NotifyCanExecuteChanged();
+
+        _ = LoadSelectedFileMetadataAsync(value);
+    }
+    
+    private bool CanOpenMetadataEditor()
+    {
+        return SelectedFile != null;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanOpenMetadataEditor))]
+    private async Task OpenMetadataEditorAsync()
+    {
+        if (SelectedFile == null)
+        {
+            return;
+        }
+
+        var viewModel = _metadataEditorViewModelFactory.Create(SelectedFile);
+        await viewModel.InitializeAsync();
+
+        var window = new MetadataEditorWindow
+        {
+            DataContext = viewModel
+        };
+
+        if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop &&
+            desktop.MainWindow != null)
+        {
+            await window.ShowDialog(desktop.MainWindow);
+        }
+        else
+        {
+            window.Show();
+        }
+
+        await LoadSelectedFileMetadataAsync(SelectedFile);
+    }
+
+    private async Task LoadSelectedFileMetadataAsync(FileRecord? file)
+    {
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            SelectedFileMetadata.Clear();
+
+            SelectedFileSummary = file == null
+                ? "Select a result file to inspect metadata."
+                : $"{file.ArchiveId} | {file.FileName}";
+        });
+
+        if (file == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                SelectedFileMetadata.Clear();
+
+                foreach (var value in metadata)
+                {
+                    SelectedFileMetadata.Add(value);
+                }
+
+                SelectedFileSummary = $"{file.FileName} — {SelectedFileMetadata.Count} metadata values";
+            });
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                SelectedFileSummary = $"Failed to load metadata: {ex.Message}";
+            });
+        }
     }
 
     public void SelectNode(NodeInstanceViewModel node)
