@@ -1,0 +1,19 @@
+ArchiveFlow Mock File
+Index: 388
+Category: Structured Data
+Subject: Workflow
+Project: Personal Knowledge Base
+Extension: .json
+MimeType: application/json
+Tags: json, workflow, data
+
+This is realistic mock content for ArchiveFlow Studio.
+It is used to test file sources, metadata filters, keyword search,
+duplicate detection, missing metadata detection, and archive health workflows.
+
+Research notes:
+- Digital archive
+- Metadata workflow
+- Personal knowledge management
+- Node-based file organization
+- Dublin Core inspired descriptive metadata

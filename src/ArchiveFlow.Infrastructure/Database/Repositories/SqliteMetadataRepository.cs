@@ -114,6 +114,36 @@ public class SqliteMetadataRepository : IMetadataRepository
         return fields.ToList();
     }
 
+    public async Task UpdateFieldDefinitionAsync(
+        int fieldId,
+        string displayName,
+        string fieldType,
+        string category,
+        bool isRequired,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            UPDATE metadata_fields
+            SET
+                display_name = @DisplayName,
+                field_type = @FieldType,
+                category = @Category,
+                is_required = @IsRequired
+            WHERE id = @FieldId;
+            """;
+
+        using var connection = _connectionFactory.CreateConnection();
+
+        await connection.ExecuteAsync(sql, new
+        {
+            FieldId = fieldId,
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? "Untitled Field" : displayName.Trim(),
+            FieldType = NormalizeFieldType(fieldType),
+            Category = NormalizeCategory(category),
+            IsRequired = isRequired
+        });
+    }
+
     public async Task<MetadataValue> AddMetadataValueAsync(
         string fileId,
         int fieldId,

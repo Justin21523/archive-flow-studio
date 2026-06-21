@@ -1,0 +1,19 @@
+ArchiveFlow Mock File
+Index: 5
+Category: Presentation
+Subject: Digital Humanities
+Project: Library Science Archive
+Extension: .pptx
+MimeType: application/vnd.openxmlformats-officedocument.presentationml.presentation
+Tags: slides, teaching, dh
+
+This is realistic mock content for ArchiveFlow Studio.
+It is used to test file sources, metadata filters, keyword search,
+duplicate detection, missing metadata detection, and archive health workflows.
+
+Research notes:
+- Digital archive
+- Metadata workflow
+- Personal knowledge management
+- Node-based file organization
+- Dublin Core inspired descriptive metadata

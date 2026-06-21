@@ -5,6 +5,8 @@ using ArchiveFlow.Application.Interfaces;
 using ArchiveFlow.Application.Services;
 using ArchiveFlow.Infrastructure.Database;
 using ArchiveFlow.Infrastructure.Database.Repositories;
+using ArchiveFlow.Infrastructure.Hashing;
+using ArchiveFlow.Infrastructure.MockData;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using FluentMigrator.Runner;
@@ -68,10 +70,12 @@ public partial class App : Avalonia.Application
 
         services.AddSingleton<IDatabaseInitializer, DatabaseInitializer>();
         services.AddSingleton<IFileRepository, SqliteFileRepository>();
-        services.AddSingleton<IMetadataRepository, SqliteMetadataRepository>();    
+        services.AddSingleton<IMetadataRepository, SqliteMetadataRepository>();
+        services.AddSingleton<IFileHashingService, Sha256FileHashingService>();
         services.AddSingleton<NodeRegistry>();
         services.AddSingleton<MetadataEditorViewModelFactory>();
-        
+        services.AddSingleton<IMockArchiveSeeder, MockArchiveSeeder>();
+
         services.AddTransient<NodeCanvasViewModel>();
         services.AddTransient<MainWindowViewModel>();
     }

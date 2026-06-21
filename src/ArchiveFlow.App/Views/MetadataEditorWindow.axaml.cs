@@ -1,3 +1,4 @@
+using System;
 using ArchiveFlow.App.ViewModels;
 using Avalonia.Controls;
 using Avalonia.Interactivity;

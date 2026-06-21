@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ArchiveFlow.Application.Nodes.Definitions;
 using ArchiveFlow.Application.Services;
+using ArchiveFlow.Application.Interfaces;
 using ArchiveFlow.App.Views;
 using ArchiveFlow.Domain.Entities;
 using ArchiveFlow.Domain.Enums;
@@ -30,6 +31,7 @@ public partial class NodeCanvasViewModel : ObservableObject
     private PortInstanceViewModel? _connectingSourcePort;
     private readonly IMetadataRepository _metadataRepository;
     private readonly MetadataEditorViewModelFactory _metadataEditorViewModelFactory;
+    private readonly IMockArchiveSeeder _mockArchiveSeeder;
 
     public ObservableCollection<MetadataValue> SelectedFileMetadata { get; } = new();
     
@@ -106,6 +108,8 @@ public partial class NodeCanvasViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isExecuting;
+    [ObservableProperty]
+    private bool _isGeneratingMockData;
 
     public bool HasSelectedNode => SelectedNode != null;
     public bool HasSelectedEdge => SelectedEdge != null;
@@ -114,12 +118,14 @@ public partial class NodeCanvasViewModel : ObservableObject
         NodeRegistry nodeRegistry,
         IFileRepository fileRepository,
         IMetadataRepository metadataRepository,
-        MetadataEditorViewModelFactory metadataEditorViewModelFactory)
+        MetadataEditorViewModelFactory metadataEditorViewModelFactory,
+        IMockArchiveSeeder mockArchiveSeeder)
     {
         _nodeRegistry = nodeRegistry;
         _fileRepository = fileRepository;
         _metadataRepository = metadataRepository;
         _metadataEditorViewModelFactory = metadataEditorViewModelFactory;
+        _mockArchiveSeeder = mockArchiveSeeder;
 
         PendingChanges.CollectionChanged += OnPendingChangesCollectionChanged;
 
@@ -151,7 +157,7 @@ public partial class NodeCanvasViewModel : ObservableObject
 
         _ = LoadSelectedFileMetadataAsync(value);
     }
-    
+
     private bool CanOpenMetadataEditor()
     {
         return SelectedFile != null;
@@ -477,6 +483,62 @@ public partial class NodeCanvasViewModel : ObservableObject
             IsExecuting = false;
         }
     }
+
+    [RelayCommand]
+    private async Task ResetAndGenerateMockDataAsync()
+    {
+        if (IsGeneratingMockData)
+        {
+            return;
+        }
+
+        IsGeneratingMockData = true;
+        ExecutionLog = "Resetting archive records and generating mock files...\n";
+        StatusMessage = "Generating mock archive data...";
+
+        try
+        {
+            var result = await _mockArchiveSeeder.ResetAndGenerateAsync(fileCount: 420);
+
+            ExecutionLog += $"Mock root: {result.MockRootPath}\n";
+            ExecutionLog += $"Generated files: {result.FileCount}\n";
+            ExecutionLog += $"Metadata values: {result.MetadataValueCount}\n";
+            ExecutionLog += $"Duplicate groups: {result.DuplicateGroupCount}\n";
+            ExecutionLog += "Extension distribution:\n";
+
+            foreach (var item in result.ExtensionCounts.OrderByDescending(x => x.Value))
+            {
+                ExecutionLog += $"  {item.Key}: {item.Value}\n";
+            }
+
+            await RefreshResultFilesFromRepositoryAsync();
+
+            StatusMessage = $"Mock archive generated and imported. Files: {result.FileCount}";
+            ExecutionLog += "\nMock data imported into SQLite. ResultFiles refreshed.\n";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Mock data generation failed: {ex.Message}";
+            ExecutionLog += $"Error: {ex.Message}\n";
+        }
+        finally
+        {
+            IsGeneratingMockData = false;
+        }
+    }
+
+    private async Task RefreshResultFilesFromRepositoryAsync()
+    {
+        ResultFiles.Clear();
+
+        var files = await _fileRepository.GetAllAsync();
+
+        foreach (var file in files.Take(500))
+        {
+            ResultFiles.Add(file);
+        }
+    }
+
     [RelayCommand]
     private async Task ApplyPendingChangesAsync()
     {
@@ -581,6 +643,289 @@ public partial class NodeCanvasViewModel : ObservableObject
         ExecutionLog += $"Discarded {count} pending changes.\n";
     }
 
+    private async Task<List<FileRecord>> ExecuteNodeAsync(
+        NodeInstanceViewModel node,
+        List<FileRecord> inputFiles)
+    {
+        var type = node.NodeType;
+
+        if (type == "source.all_files")
+        {
+            return (await _fileRepository.GetAllAsync()).ToList();
+        }
+
+        if (type == "source.recent_imports")
+        {
+            return (await _fileRepository.GetAllAsync())
+                .OrderByDescending(file => file.ImportedAt)
+                .Take(100)
+                .ToList();
+        }
+
+        if (type == "source.unorganized_files")
+        {
+            var allFiles = (await _fileRepository.GetAllAsync()).ToList();
+            var result = new List<FileRecord>();
+
+            foreach (var file in allFiles)
+            {
+                var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
+
+                var hasProject = HasMetadata(metadata, "project");
+                var hasSubject = HasMetadata(metadata, "subject");
+                var hasTag = HasMetadata(metadata, "tag");
+
+                var status = file.GetStatus();
+
+                if (status == FileStatus.New ||
+                    status == FileStatus.Incomplete ||
+                    !hasProject ||
+                    !hasSubject ||
+                    !hasTag)
+                {
+                    result.Add(file);
+                }
+            }
+
+            return result;
+        }
+
+        if (type == "source.missing_metadata")
+        {
+            var allFiles = (await _fileRepository.GetAllAsync()).ToList();
+            var result = new List<FileRecord>();
+
+            foreach (var file in allFiles)
+            {
+                var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
+
+                var hasTitle = HasMetadata(metadata, "title");
+                var hasSubject = HasMetadata(metadata, "subject");
+                var hasDescription = HasMetadata(metadata, "description");
+
+                if (!hasTitle || !hasSubject || !hasDescription)
+                {
+                    result.Add(file);
+                }
+            }
+
+            return result;
+        }
+
+        if (type == "source.duplicate_files")
+        {
+            var allFiles = (await _fileRepository.GetAllAsync()).ToList();
+
+            return allFiles
+                .Where(file => !string.IsNullOrWhiteSpace(file.FileHash))
+                .GroupBy(file => file.FileHash)
+                .Where(group => group.Count() > 1)
+                .SelectMany(group => group)
+                .OrderBy(file => file.FileHash)
+                .ThenBy(file => file.FileName)
+                .ToList();
+        }
+
+        if (type == "source.folder_source")
+        {
+            var folderPath = node.GetParameterValue("folderPath");
+
+            if (string.IsNullOrWhiteSpace(folderPath))
+            {
+                return (await _fileRepository.GetAllAsync()).ToList();
+            }
+
+            return (await _fileRepository.GetAllAsync())
+                .Where(file => file.FilePath.Contains(folderPath, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        if (type == "filter.extension")
+        {
+            var extension = NormalizeExtension(node.GetParameterValue("extension", ".pdf"));
+
+            return inputFiles
+                .Where(file => NormalizeExtension(file.FileExtension) == extension)
+                .ToList();
+        }
+
+        if (type == "filter.file_type")
+        {
+            var fileType = node.GetParameterValue("fileType", "Document");
+
+            return inputFiles
+                .Where(file => IsFileTypeMatch(file, fileType))
+                .ToList();
+        }
+
+        if (type == "filter.path_contains")
+        {
+            var pathText = node.GetParameterValue("pathText");
+
+            if (string.IsNullOrWhiteSpace(pathText))
+            {
+                return inputFiles;
+            }
+
+            return inputFiles
+                .Where(file => file.FilePath.Contains(pathText, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        if (type == "filter.status")
+        {
+            var status = node.GetParameterValue("status", "Scanned");
+
+            return inputFiles
+                .Where(file => StatusMatches(file, status))
+                .ToList();
+        }
+
+        if (type == "filter.size")
+        {
+            var minText = node.GetParameterValue("minSizeMb", "0");
+            var maxText = node.GetParameterValue("maxSizeMb", "100");
+
+            _ = double.TryParse(minText, out var minMb);
+            _ = double.TryParse(maxText, out var maxMb);
+
+            var minBytes = minMb * 1024 * 1024;
+            var maxBytes = maxMb * 1024 * 1024;
+
+            return inputFiles
+                .Where(file => file.FileSize >= minBytes && file.FileSize <= maxBytes)
+                .ToList();
+        }
+
+        if (type == "filter.date_range")
+        {
+            var startText = node.GetParameterValue("startDate");
+            var endText = node.GetParameterValue("endDate");
+
+            var hasStart = DateTime.TryParse(startText, out var startDate);
+            var hasEnd = DateTime.TryParse(endText, out var endDate);
+
+            return inputFiles
+                .Where(file =>
+                {
+                    var date = file.ImportedAt;
+
+                    if (hasStart && date < startDate)
+                    {
+                        return false;
+                    }
+
+                    if (hasEnd && date > endDate)
+                    {
+                        return false;
+                    }
+
+                    return true;
+                })
+                .ToList();
+        }
+
+        if (type == "filter.tag")
+        {
+            var tag = node.GetParameterValue("tag");
+
+            if (string.IsNullOrWhiteSpace(tag))
+            {
+                return inputFiles;
+            }
+
+            return await FilterByMetadataValueAsync(inputFiles, "tag", tag);
+        }
+
+        if (type == "filter.subject")
+        {
+            var subject = node.GetParameterValue("subject");
+
+            if (string.IsNullOrWhiteSpace(subject))
+            {
+                return inputFiles;
+            }
+
+            return await FilterByMetadataValueAsync(inputFiles, "subject", subject);
+        }
+
+        if (type == "filter.metadata_field")
+        {
+            var fieldName = node.GetParameterValue("fieldName", "subject");
+            var operation = node.GetParameterValue("operator", "contains");
+            var expectedValue = node.GetParameterValue("value");
+
+            if (string.IsNullOrWhiteSpace(fieldName))
+            {
+                return inputFiles;
+            }
+
+            return await FilterByMetadataExpressionAsync(
+                inputFiles,
+                fieldName,
+                operation,
+                expectedValue);
+        }
+
+        if (type == "search.keyword" || type == "search.filename" || type == "search.content")
+        {
+            var query = type switch
+            {
+                "search.filename" => node.GetParameterValue("filename"),
+                "search.content" => node.GetParameterValue("contentQuery"),
+                _ => node.GetParameterValue("query")
+            };
+
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return inputFiles;
+            }
+
+            return await SearchFilesAsync(inputFiles, query);
+        }
+
+        if (type == "search.boolean")
+        {
+            var expression = node.GetParameterValue("expression", "AI AND metadata");
+
+            if (string.IsNullOrWhiteSpace(expression))
+            {
+                return inputFiles;
+            }
+
+            return await BooleanSearchFilesAsync(inputFiles, expression);
+        }
+
+        if (type == "logic.limit")
+        {
+            var countText = node.GetParameterValue("count", "100");
+            var count = int.TryParse(countText, out var parsedCount) ? parsedCount : 100;
+
+            return inputFiles.Take(Math.Max(0, count)).ToList();
+        }
+
+        if (type == "logic.sort_by")
+        {
+            var field = node.GetParameterValue("field", "Imported Date");
+            var direction = node.GetParameterValue("direction", "Descending");
+            var descending = direction.Equals("Descending", StringComparison.OrdinalIgnoreCase);
+
+            return SortFiles(inputFiles, field, descending);
+        }
+
+        if (node.Definition.Category == NodeCategory.Outputs)
+        {
+            return inputFiles;
+        }
+
+        if (node.Definition.IsActionNode)
+        {
+            return inputFiles;
+        }
+
+        return inputFiles;
+    }
+
     private async Task<List<FileRecord>> PreviewActionNodeAsync(
         NodeInstanceViewModel node,
         List<FileRecord> inputFiles)
@@ -683,6 +1028,238 @@ public partial class NodeCanvasViewModel : ObservableObject
         }
     }
 
+    private static bool HasMetadata(
+        IReadOnlyList<MetadataValue> metadata,
+        string fieldName)
+    {
+        return metadata.Any(value =>
+            value.FieldName.Equals(fieldName, StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(value.ValueText));
+    }
+
+    private async Task<List<FileRecord>> FilterByMetadataValueAsync(
+        List<FileRecord> files,
+        string fieldName,
+        string expectedValue)
+    {
+        var result = new List<FileRecord>();
+
+        foreach (var file in files)
+        {
+            var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
+
+            var matched = metadata.Any(value =>
+                value.FieldName.Equals(fieldName, StringComparison.OrdinalIgnoreCase) &&
+                value.ValueText.Contains(expectedValue, StringComparison.OrdinalIgnoreCase));
+
+            if (matched)
+            {
+                result.Add(file);
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<List<FileRecord>> FilterByMetadataExpressionAsync(
+        List<FileRecord> files,
+        string fieldName,
+        string operation,
+        string expectedValue)
+    {
+        var result = new List<FileRecord>();
+
+        foreach (var file in files)
+        {
+            var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
+
+            var values = metadata
+                .Where(value => value.FieldName.Equals(fieldName, StringComparison.OrdinalIgnoreCase))
+                .Select(value => value.ValueText ?? string.Empty)
+                .ToList();
+
+            var matched = values.Any(value => MatchesMetadataOperator(value, operation, expectedValue));
+
+            if (matched)
+            {
+                result.Add(file);
+            }
+        }
+
+        return result;
+    }
+
+    private static bool MatchesMetadataOperator(
+        string actualValue,
+        string operation,
+        string expectedValue)
+    {
+        operation = operation.Trim().ToLowerInvariant();
+
+        return operation switch
+        {
+            "equals" => actualValue.Equals(expectedValue, StringComparison.OrdinalIgnoreCase),
+            "contains" => actualValue.Contains(expectedValue, StringComparison.OrdinalIgnoreCase),
+            "starts with" => actualValue.StartsWith(expectedValue, StringComparison.OrdinalIgnoreCase),
+            "ends with" => actualValue.EndsWith(expectedValue, StringComparison.OrdinalIgnoreCase),
+            "is empty" => string.IsNullOrWhiteSpace(actualValue),
+            "is not empty" => !string.IsNullOrWhiteSpace(actualValue),
+            _ => actualValue.Contains(expectedValue, StringComparison.OrdinalIgnoreCase)
+        };
+    }
+
+    private async Task<List<FileRecord>> SearchFilesAsync(
+        List<FileRecord> files,
+        string query)
+    {
+        var result = new List<FileRecord>();
+
+        foreach (var file in files)
+        {
+            var searchText = await BuildSearchTextAsync(file);
+
+            if (searchText.Contains(query, StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add(file);
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<List<FileRecord>> BooleanSearchFilesAsync(
+        List<FileRecord> files,
+        string expression)
+    {
+        var result = new List<FileRecord>();
+
+        foreach (var file in files)
+        {
+            var searchText = await BuildSearchTextAsync(file);
+
+            if (MatchesBooleanExpression(searchText, expression))
+            {
+                result.Add(file);
+            }
+        }
+
+        return result;
+    }
+
+    private async Task<string> BuildSearchTextAsync(FileRecord file)
+    {
+        var metadata = await _metadataRepository.GetMetadataByFileIdAsync(file.Id);
+
+        var metadataText = string.Join(
+            " ",
+            metadata.Select(value => $"{value.FieldName} {value.ValueText}"));
+
+        return $"{file.ArchiveId} {file.FileName} {file.FileExtension} {file.FilePath} {metadataText}";
+    }
+
+    private static bool MatchesBooleanExpression(
+        string searchText,
+        string expression)
+    {
+        expression = expression.Trim();
+
+        if (expression.Contains(" AND ", StringComparison.OrdinalIgnoreCase))
+        {
+            return expression
+                .Split(" AND ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .All(term => searchText.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (expression.Contains(" OR ", StringComparison.OrdinalIgnoreCase))
+        {
+            return expression
+                .Split(" OR ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Any(term => searchText.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (expression.Contains(" NOT ", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = expression.Split(" NOT ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            if (parts.Length == 2)
+            {
+                return searchText.Contains(parts[0], StringComparison.OrdinalIgnoreCase) &&
+                    !searchText.Contains(parts[1], StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        return searchText.Contains(expression, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeExtension(string extension)
+    {
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            return string.Empty;
+        }
+
+        extension = extension.Trim().ToLowerInvariant();
+
+        return extension.StartsWith(".")
+            ? extension
+            : $".{extension}";
+    }
+
+    private static bool IsFileTypeMatch(FileRecord file, string fileType)
+    {
+        var extension = NormalizeExtension(file.FileExtension);
+
+        return fileType.ToLowerInvariant() switch
+        {
+            "document" => extension is ".pdf" or ".doc" or ".docx" or ".txt" or ".md" or ".rtf" or ".epub",
+            "image" => extension is ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".tiff" or ".bmp" or ".svg",
+            "video" => extension is ".mp4" or ".mov" or ".mkv" or ".avi" or ".webm",
+            "audio" => extension is ".mp3" or ".wav" or ".flac" or ".ogg" or ".m4a",
+            "code" => extension is ".cs" or ".js" or ".ts" or ".py" or ".java" or ".cpp" or ".h" or ".html" or ".css",
+            "3d model" => extension is ".blend" or ".fbx" or ".obj" or ".glb" or ".gltf" or ".stl",
+            "archive" => extension is ".zip" or ".7z" or ".rar" or ".tar" or ".gz",
+            "dataset" => extension is ".csv" or ".json" or ".xml" or ".sqlite" or ".db",
+            _ => true
+        };
+    }
+
+    private static bool StatusMatches(FileRecord file, string desiredStatus)
+    {
+        var actualStatus = file.GetStatus().ToString();
+
+        return actualStatus.Equals(desiredStatus, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static List<FileRecord> SortFiles(
+        List<FileRecord> files,
+        string field,
+        bool descending)
+    {
+        IOrderedEnumerable<FileRecord> ordered = field.ToLowerInvariant() switch
+        {
+            "filename" => descending
+                ? files.OrderByDescending(file => file.FileName)
+                : files.OrderBy(file => file.FileName),
+
+            "size" => descending
+                ? files.OrderByDescending(file => file.FileSize)
+                : files.OrderBy(file => file.FileSize),
+
+            "modified date" => descending
+                ? files.OrderByDescending(file => file.ModifiedAt)
+                : files.OrderBy(file => file.ModifiedAt),
+
+            "status" => descending
+                ? files.OrderByDescending(file => file.Status)
+                : files.OrderBy(file => file.Status),
+
+            _ => descending
+                ? files.OrderByDescending(file => file.ImportedAt)
+                : files.OrderBy(file => file.ImportedAt)
+        };
+
+        return ordered.ToList();
+    }
     private async Task PreviewAddTagAsync(
         NodeInstanceViewModel node,
         IReadOnlyList<FileRecord> files)
@@ -1184,173 +1761,6 @@ public partial class NodeCanvasViewModel : ObservableObject
             .ToList();
     }
 
-    private async Task<List<FileRecord>> ExecuteNodeAsync(
-        NodeInstanceViewModel node,
-        List<FileRecord> inputFiles)
-    {
-        var type = node.NodeType;
-
-        if (type == "source.all_files")
-        {
-            return (await _fileRepository.GetAllAsync()).ToList();
-        }
-
-        if (type == "source.recent_imports")
-        {
-            return (await _fileRepository.GetAllAsync())
-                .OrderByDescending(file => file.ImportedAt)
-                .Take(100)
-                .ToList();
-        }
-
-        if (type == "source.folder_source")
-        {
-            var folderPath = node.GetParameterValue("folderPath");
-
-            if (string.IsNullOrWhiteSpace(folderPath))
-            {
-                return (await _fileRepository.GetAllAsync()).ToList();
-            }
-
-            return (await _fileRepository.GetAllAsync())
-                .Where(file => file.FilePath.Contains(folderPath, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-
-        if (type == "filter.extension")
-        {
-            var extension = NormalizeExtension(node.GetParameterValue("extension", ".pdf"));
-
-            return inputFiles
-                .Where(file => NormalizeExtension(file.FileExtension) == extension)
-                .ToList();
-        }
-
-        if (type == "filter.file_type")
-        {
-            var fileType = node.GetParameterValue("fileType", "Document");
-
-            return inputFiles
-                .Where(file => IsFileTypeMatch(file, fileType))
-                .ToList();
-        }
-
-        if (type == "filter.path_contains")
-        {
-            var pathText = node.GetParameterValue("pathText");
-
-            if (string.IsNullOrWhiteSpace(pathText))
-            {
-                return inputFiles;
-            }
-
-            return inputFiles
-                .Where(file => file.FilePath.Contains(pathText, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-
-        if (type == "filter.status")
-        {
-            var status = node.GetParameterValue("status", "New");
-
-            return inputFiles
-                .Where(file => StatusMatches(file, status))
-                .ToList();
-        }
-
-        if (type == "filter.size")
-        {
-            var minText = node.GetParameterValue("minSizeMb", "0");
-            var maxText = node.GetParameterValue("maxSizeMb", "100");
-
-            _ = double.TryParse(minText, out var minMb);
-            _ = double.TryParse(maxText, out var maxMb);
-
-            var minBytes = minMb * 1024 * 1024;
-            var maxBytes = maxMb * 1024 * 1024;
-
-            return inputFiles
-                .Where(file => file.FileSize >= minBytes && file.FileSize <= maxBytes)
-                .ToList();
-        }
-
-        if (type == "filter.date_range")
-        {
-            var startText = node.GetParameterValue("startDate");
-            var endText = node.GetParameterValue("endDate");
-
-            var hasStart = DateTime.TryParse(startText, out var startDate);
-            var hasEnd = DateTime.TryParse(endText, out var endDate);
-
-            return inputFiles
-                .Where(file =>
-                {
-                    var date = file.ImportedAt;
-
-                    if (hasStart && date < startDate)
-                    {
-                        return false;
-                    }
-
-                    if (hasEnd && date > endDate)
-                    {
-                        return false;
-                    }
-
-                    return true;
-                })
-                .ToList();
-        }
-
-        if (type == "search.keyword" || type == "search.filename")
-        {
-            var query = type == "search.filename"
-                ? node.GetParameterValue("filename")
-                : node.GetParameterValue("query");
-
-            if (string.IsNullOrWhiteSpace(query))
-            {
-                return inputFiles;
-            }
-
-            return inputFiles
-                .Where(file =>
-                    file.FileName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    file.FilePath.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    file.ContentPreview.Contains(query, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-
-        if (type == "logic.limit")
-        {
-            var countText = node.GetParameterValue("count", "100");
-            var count = int.TryParse(countText, out var parsedCount) ? parsedCount : 100;
-
-            return inputFiles.Take(Math.Max(0, count)).ToList();
-        }
-
-        if (type == "logic.sort_by")
-        {
-            var field = node.GetParameterValue("field", "Imported Date");
-            var direction = node.GetParameterValue("direction", "Descending");
-            var descending = direction.Equals("Descending", StringComparison.OrdinalIgnoreCase);
-
-            return SortFiles(inputFiles, field, descending);
-        }
-
-        if (node.Definition.Category == NodeCategory.Outputs)
-        {
-            return inputFiles;
-        }
-
-        if (node.Definition.IsActionNode)
-        {
-            return inputFiles;
-        }
-
-        return inputFiles;
-    }
-
     private static string BuildBezierPath(double x1, double y1, double x2, double y2)
     {
         var distance = Math.Abs(x2 - x1);
@@ -1362,86 +1772,6 @@ public partial class NodeCanvasViewModel : ObservableObject
         var cy2 = y2;
 
         return $"M {x1},{y1} C {cx1},{cy1} {cx2},{cy2} {x2},{y2}";
-    }
-
-    private static string NormalizeExtension(string extension)
-    {
-        if (string.IsNullOrWhiteSpace(extension))
-        {
-            return string.Empty;
-        }
-
-        extension = extension.Trim().ToLowerInvariant();
-
-        return extension.StartsWith(".")
-            ? extension
-            : $".{extension}";
-    }
-
-    private static bool IsFileTypeMatch(FileRecord file, string fileType)
-    {
-        var extension = NormalizeExtension(file.FileExtension);
-
-        return fileType.ToLowerInvariant() switch
-        {
-            "document" => extension is ".pdf" or ".doc" or ".docx" or ".txt" or ".md" or ".rtf",
-            "image" => extension is ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".tiff" or ".bmp",
-            "video" => extension is ".mp4" or ".mov" or ".mkv" or ".avi" or ".webm",
-            "audio" => extension is ".mp3" or ".wav" or ".flac" or ".ogg" or ".m4a",
-            "code" => extension is ".cs" or ".js" or ".ts" or ".py" or ".java" or ".cpp" or ".h" or ".html" or ".css",
-            "3d model" => extension is ".blend" or ".fbx" or ".obj" or ".glb" or ".gltf" or ".stl",
-            "archive" => extension is ".zip" or ".7z" or ".rar" or ".tar" or ".gz",
-            _ => true
-        };
-    }
-
-    private static bool StatusMatches(FileRecord file, string desiredStatus)
-    {
-        var actual = file.Status.ToString();
-
-        if (actual.Equals(desiredStatus, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (Enum.TryParse<FileStatus>(desiredStatus, ignoreCase: true, out var parsed))
-        {
-            return actual == ((int)parsed).ToString() ||
-                   actual.Equals(parsed.ToString(), StringComparison.OrdinalIgnoreCase);
-        }
-
-        return false;
-    }
-
-    private static List<FileRecord> SortFiles(
-        List<FileRecord> files,
-        string field,
-        bool descending)
-    {
-        IOrderedEnumerable<FileRecord> ordered = field.ToLowerInvariant() switch
-        {
-            "filename" => descending
-                ? files.OrderByDescending(file => file.FileName)
-                : files.OrderBy(file => file.FileName),
-
-            "size" => descending
-                ? files.OrderByDescending(file => file.FileSize)
-                : files.OrderBy(file => file.FileSize),
-
-            "modified date" => descending
-                ? files.OrderByDescending(file => file.ModifiedAt)
-                : files.OrderBy(file => file.ModifiedAt),
-
-            "status" => descending
-                ? files.OrderByDescending(file => file.Status)
-                : files.OrderBy(file => file.Status),
-
-            _ => descending
-                ? files.OrderByDescending(file => file.ImportedAt)
-                : files.OrderBy(file => file.ImportedAt)
-        };
-
-        return ordered.ToList();
     }
 
     private static string FormatCategoryName(NodeCategory category)

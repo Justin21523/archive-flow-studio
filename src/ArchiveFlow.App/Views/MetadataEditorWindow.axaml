@@ -112,7 +112,7 @@
                                        Foreground="#888888"
                                        FontSize="11"/>
                             <TextBox Text="{Binding NewFieldName, Mode=TwoWay}"
-                                     Watermark="e.g. reading_status"
+                                     PlaceholderText="e.g. reading_status"
                                      Background="#2D2D30"
                                      Foreground="White"
                                      BorderBrush="#444444"
@@ -123,7 +123,7 @@
                                        Foreground="#888888"
                                        FontSize="11"/>
                             <TextBox Text="{Binding NewDisplayName, Mode=TwoWay}"
-                                     Watermark="Optional"
+                                     PlaceholderText="Optional"
                                      Background="#2D2D30"
                                      Foreground="White"
                                      BorderBrush="#444444"
@@ -161,7 +161,7 @@
                                        Foreground="#888888"
                                        FontSize="11"/>
                             <TextBox Text="{Binding NewValueText, Mode=TwoWay}"
-                                     Watermark="Enter metadata value"
+                                     PlaceholderText="Enter metadata value"
                                      AcceptsReturn="True"
                                      TextWrapping="Wrap"
                                      MinHeight="70"

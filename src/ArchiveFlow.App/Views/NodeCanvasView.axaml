@@ -10,7 +10,8 @@
                 Grid.Row="0"
                 Background="#252526"
                 Padding="12">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto">
+            <!-- tool bar -->
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                 <StackPanel>
                     <TextBlock Text="Node Workspace"
                             Foreground="White"
@@ -23,40 +24,46 @@
                 </StackPanel>
 
                 <Button Grid.Column="1"
+                        Content="Reset + Generate Mock Data"
+                        Command="{Binding ResetAndGenerateMockDataCommand}"
+                        Margin="0,0,8,0"
+                        Padding="12,6"/>
+
+                <Button Grid.Column="2"
                         Content="Execute Workflow"
                         Command="{Binding ExecuteWorkflowCommand}"
                         Margin="0,0,8,0"
                         Padding="12,6"/>
 
-                <Button Grid.Column="2"
+                <Button Grid.Column="3"
                         Content="Apply Pending Changes"
                         Command="{Binding ApplyPendingChangesCommand}"
                         IsEnabled="{Binding HasPendingChanges}"
                         Margin="0,0,8,0"
                         Padding="12,6"/>
 
-                <Button Grid.Column="3"
+                <Button Grid.Column="4"
                         Content="Discard Preview"
                         Command="{Binding DiscardPendingChangesCommand}"
                         IsEnabled="{Binding HasPendingChanges}"
                         Margin="0,0,8,0"
                         Padding="12,6"/>
 
-                <Button Grid.Column="4"
+                <Button Grid.Column="5"
                         Content="Delete Node"
                         Command="{Binding DeleteSelectedNodeCommand}"
                         IsEnabled="{Binding HasSelectedNode}"
                         Margin="0,0,8,0"
                         Padding="12,6"/>
 
-                <Button Grid.Column="5"
+                <Button Grid.Column="6"
                         Content="Delete Connection"
                         Command="{Binding DeleteSelectedEdgeCommand}"
                         IsEnabled="{Binding HasSelectedEdge}"
                         Margin="0,0,8,0"
                         Padding="12,6"/>
 
-                <Button Grid.Column="6"
+                <Button Grid.Column="7"
                         Content="Clear Canvas"
                         Command="{Binding ClearCanvasCommand}"
                         Padding="12,6"/>

@@ -21,18 +21,16 @@ public partial class MetadataEditorViewModel : ObservableObject
     
     public event EventHandler? RequestClose;
     
-    [ObservableProperty] private string _fileName = string.Empty;
-    [ObservableProperty] private string _fileId = string.Empty;
     [ObservableProperty] private string _statusMessage = "Ready";
     
     [ObservableProperty] private string _newFieldName = string.Empty;
     [ObservableProperty] private string _newFieldCategory = "Basic";
     [ObservableProperty] private string _newFieldValue = string.Empty;
 
-    public ObservableCollection<MetadataFieldViewModel> BasicFields { get; } = new();
-    public ObservableCollection<MetadataFieldViewModel> DescriptiveFields { get; } = new();
-    public ObservableCollection<MetadataFieldViewModel> PersonalFields { get; } = new();
-    public ObservableCollection<MetadataFieldViewModel> TechnicalFields { get; } = new();
+    public ObservableCollection<MetadataEditorFieldViewModel> BasicFields { get; } = new();
+    public ObservableCollection<MetadataEditorFieldViewModel> DescriptiveFields { get; } = new();
+    public ObservableCollection<MetadataEditorFieldViewModel> PersonalFields { get; } = new();
+    public ObservableCollection<MetadataEditorFieldViewModel> TechnicalFields { get; } = new();
 
     public ObservableCollection<string> NewFieldCategoryOptions { get; } = new()
     {
@@ -417,82 +415,4 @@ public partial class MetadataEditorViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private async Task AddFieldAsync()
-    {
-        if (string.IsNullOrWhiteSpace(NewFieldName) || string.IsNullOrWhiteSpace(NewFieldValue))
-        {
-            StatusMessage = "Field name and value are required";
-            return;
-        }
-
-        try
-        {
-            var metaField = await _metadataRepository.GetOrCreateFieldAsync(
-                NewFieldName, NewFieldName, "String", NewFieldCategory);
-            
-            if (metaField != null)
-            {
-                await _metadataRepository.AddMetadataValueAsync(FileId, metaField.Id, NewFieldValue);
-                
-                var newVm = new MetadataFieldViewModel(new MetadataValue
-                {
-                    FieldName = NewFieldName,
-                    ValueText = NewFieldValue,
-                    Category = NewFieldCategory
-                });
-
-                switch (NewFieldCategory.ToLowerInvariant())
-                {
-                    case "basic": BasicFields.Add(newVm); break;
-                    case "descriptive": DescriptiveFields.Add(newVm); break;
-                    case "personal": PersonalFields.Add(newVm); break;
-                    case "technical": TechnicalFields.Add(newVm); break;
-                }
-
-                NewFieldName = string.Empty;
-                NewFieldValue = string.Empty;
-                StatusMessage = $"Added field: {NewFieldName}";
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to add field");
-            StatusMessage = $"Error: {ex.Message}";
-        }
-    }
-
-    [RelayCommand]
-    private void RemoveField(MetadataFieldViewModel? field)
-    {
-        if (field == null) return;
-
-        BasicFields.Remove(field);
-        DescriptiveFields.Remove(field);
-        PersonalFields.Remove(field);
-        TechnicalFields.Remove(field);
-        
-        StatusMessage = $"Removed field: {field.FieldName}";
-    }
-
-}
-
-public partial class MetadataFieldViewModel : ObservableObject
-{
-    [ObservableProperty] private string _fieldName = string.Empty;
-    [ObservableProperty] private string _valueText = string.Empty;
-    [ObservableProperty] private string _category = string.Empty;
-    [ObservableProperty] private bool _isModified;
-
-    public MetadataFieldViewModel(MetadataValue meta)
-    {
-        FieldName = meta.FieldName;
-        ValueText = meta.ValueText ?? string.Empty;
-        Category = meta.Category;
-    }
-
-    partial void OnValueTextChanged(string value)
-    {
-        IsModified = true;
-    }
 }

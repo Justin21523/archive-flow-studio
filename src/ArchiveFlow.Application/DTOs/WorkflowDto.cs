@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace ArchiveFlow.Application.DTOs;
 
 public class WorkflowDto

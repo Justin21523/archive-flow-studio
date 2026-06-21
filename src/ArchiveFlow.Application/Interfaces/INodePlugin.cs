@@ -22,13 +22,13 @@ public interface INodePlugin
     /// <summary>
     /// Returns a list of node definitions provided by this plugin.
     /// </summary>
-    IEnumerable<NodeDefinition> GetNodeDefinitions();
+    IEnumerable<INodeDefinition> GetNodeDefinitions();
 }
 
 /// <summary>
 /// Describes a node type provided by a plugin, including how to instantiate it.
 /// </summary>
-public class NodeDefinition
+public class INodeDefinition
 {
     public string NodeType { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
