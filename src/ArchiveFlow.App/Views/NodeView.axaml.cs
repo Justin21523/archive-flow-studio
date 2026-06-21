@@ -12,15 +12,50 @@ public partial class NodeView : UserControl
         InitializeComponent();
     }
 
-    private void Node_PointerPressed(object? sender, PointerPressedEventArgs e)
+    private void NodeBody_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (DataContext is not NodeInstanceViewModel node)
         {
             return;
         }
 
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
         var canvasView = this.FindAncestorOfType<NodeCanvasView>();
-        canvasView?.SelectNodeFromCard(node);
+        if (canvasView == null)
+        {
+            return;
+        }
+
+        e.Pointer.Capture(canvasView.WorkspaceCanvas);
+        canvasView.StartNodeDrag(node, e.GetPosition(canvasView.WorkspaceCanvas));
+
+        e.Handled = true;
+    }
+
+    private void OutputPort_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is not NodeInstanceViewModel node || node.OutputPort == null)
+        {
+            return;
+        }
+
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        var canvasView = this.FindAncestorOfType<NodeCanvasView>();
+        if (canvasView == null)
+        {
+            return;
+        }
+
+        e.Pointer.Capture(canvasView.WorkspaceCanvas);
+        canvasView.StartConnection(node.OutputPort, e.GetPosition(canvasView.WorkspaceCanvas));
 
         e.Handled = true;
     }

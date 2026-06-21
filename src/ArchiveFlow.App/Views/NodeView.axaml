@@ -3,77 +3,77 @@
              xmlns:vm="using:ArchiveFlow.App.ViewModels"
              x:Class="ArchiveFlow.App.Views.NodeView"
              x:DataType="vm:NodeInstanceViewModel"
-             Width="230"
-             Height="118">
+             Width="220">
 
     <Grid>
+        <Ellipse Width="14"
+                 Height="14"
+                 Fill="#252526"
+                 Stroke="#888888"
+                 StrokeThickness="2"
+                 HorizontalAlignment="Left"
+                 VerticalAlignment="Center"
+                 Margin="-7,0,0,0"
+                 IsVisible="{Binding InputCount}"/>
+
         <Border Background="#2D2D30"
                 BorderBrush="{Binding BorderBrush}"
                 BorderThickness="2"
-                CornerRadius="8"
-                Padding="12"
-                Margin="10,0"
-                PointerPressed="Node_PointerPressed">
-            <Grid RowDefinitions="Auto,*,Auto">
-                <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
-                    <TextBlock Text="{Binding Title}"
-                               Foreground="White"
-                               FontSize="14"
-                               FontWeight="Bold"
-                               TextTrimming="CharacterEllipsis"/>
+                CornerRadius="6"
+                PointerPressed="NodeBody_PointerPressed">
+            <Grid RowDefinitions="Auto,Auto,Auto"
+                  Margin="10">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel>
+                        <TextBlock Text="{Binding Title}"
+                                   Foreground="White"
+                                   FontWeight="SemiBold"
+                                   FontSize="13"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding Subcategory}"
+                                   Foreground="#9E9E9E"
+                                   FontSize="10"
+                                   TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
 
                     <Border Grid.Column="1"
                             Background="{Binding BadgeBrush}"
-                            CornerRadius="4"
-                            Padding="6,2"
-                            Margin="8,0,0,0">
+                            CornerRadius="3"
+                            Padding="5,2"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Top">
                         <TextBlock Text="{Binding BadgeText}"
                                    Foreground="White"
-                                   FontSize="10"
+                                   FontSize="9"
                                    FontWeight="Bold"/>
                     </Border>
                 </Grid>
 
-                <StackPanel Grid.Row="1" Margin="0,8,0,0">
-                    <TextBlock Text="{Binding NodeType}"
-                               Foreground="#A0A0A0"
-                               FontSize="11"
-                               TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="{Binding ModeText}"
-                               Foreground="#CCCCCC"
-                               FontSize="11"
-                               TextTrimming="CharacterEllipsis"/>
-                </StackPanel>
+                <TextBlock Grid.Row="1"
+                           Text="{Binding Description}"
+                           Foreground="#BBBBBB"
+                           FontSize="10"
+                           TextWrapping="Wrap"
+                           MaxHeight="38"
+                           Margin="0,8,0,0"/>
 
-                <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
-                    <TextBlock Text="{Binding Status}"
-                               Foreground="#8BC34A"
-                               FontSize="11"/>
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding InputCount, StringFormat='In: {0}'}"
-                               Foreground="#999999"
-                               FontSize="10"
-                               Margin="0,0,6,0"/>
-                </Grid>
+                <TextBlock Grid.Row="2"
+                           Text="{Binding Status}"
+                           Foreground="#80CBC4"
+                           FontSize="10"
+                           Margin="0,8,0,0"/>
             </Grid>
         </Border>
 
-        <Ellipse Width="12"
-                 Height="12"
-                 Fill="{Binding AccentBrush}"
+        <Ellipse Width="16"
+                 Height="16"
+                 Fill="#007ACC"
                  Stroke="White"
-                 StrokeThickness="1"
-                 HorizontalAlignment="Left"
-                 VerticalAlignment="Center"
-                 Margin="2,0,0,0"/>
-
-        <Ellipse Width="12"
-                 Height="12"
-                 Fill="{Binding AccentBrush}"
-                 Stroke="White"
-                 StrokeThickness="1"
+                 StrokeThickness="2"
                  HorizontalAlignment="Right"
                  VerticalAlignment="Center"
-                 Margin="0,0,2,0"/>
+                 Margin="0,0,-8,0"
+                 PointerPressed="OutputPort_PointerPressed"
+                 IsVisible="{Binding OutputCount}"/>
     </Grid>
 </UserControl>
