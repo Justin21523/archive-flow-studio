@@ -2,7 +2,7 @@
 
 **Node-based Personal Digital Archive & Metadata Workflow System**
 
-A professional desktop application for managing, organizing, and analyzing digital archives using a visual node-based workflow system. Built with C# .NET and Avalonia UI, featuring Dublin Core metadata standards, knowledge graph visualization, and plugin architecture.
+ArchiveFlow Studio is a learning-focused desktop application for exploring metadata workflows, file organization, and digital archive review processes through a visual node canvas. It is built with C#/.NET, Avalonia UI, SQLite, and Dapper, and is currently used as a portfolio project for practicing desktop UI structure, local persistence, and library-information-inspired metadata workflows.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)
@@ -12,9 +12,11 @@ A professional desktop application for managing, organizing, and analyzing digit
 
 ![ArchiveFlow Studio Main Canvas](data/screenshot.png)
 
+The current screenshot shows the workflow canvas with connected source, filter, tag, logic, and result nodes. The side panels expose the node library, selected file metadata, and result table, reflecting the project goal: make archive-oriented file processing and metadata review easier to inspect visually.
+
 ## 🏆 Portfolio Significance & Outcomes
 
-This project showcases several advanced software engineering and desktop application design patterns:
+This project is presented as an in-progress learning project. It focuses on several practical software engineering and desktop application design patterns:
 - **Custom UI Canvas Control**: Features a sophisticated node-based workflow editor built from scratch in Avalonia UI. It manages mouse pan/zoom matrices, node selection states, dynamic port connection rendering using Bezier curves, and drag-and-drop mechanics.
 - **Modular Plugin System**: Implements a clean, interface-driven DLL plugin architecture using dynamic assembly reflection. This allows third-party developers to extend the node library with custom actions and file processor components.
 - **Optimized Local Persistence**: Leverages a highly organized SQLite database schema paired with Dapper ORM. Includes SQLite FTS5 for lightning-fast full-text search capability across metadata fields and contents.
