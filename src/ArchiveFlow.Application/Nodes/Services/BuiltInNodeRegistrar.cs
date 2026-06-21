@@ -82,7 +82,7 @@ public static class BuiltInNodeRegistrar
             IsPreviewOnly = true,
             AccentColor = "#2196F3",
             Parameters = { new ParameterDefinition { Key = "SizeRule", Label = "Size Range (min:max)", Type = "Text", DefaultValue = "0:1048576" } },
-            Factory = () => new SizeFilterNode(string.Empty),
+            Factory = (sp) => new SizeFilterNode(string.Empty),
             ApplyParameters = (node, parameters) => { if (node is SizeFilterNode n && parameters.TryGetValue("SizeRule", out var val)) n.SizeRule = val; }
         });
 
@@ -95,7 +95,7 @@ public static class BuiltInNodeRegistrar
             IsPreviewOnly = true,
             AccentColor = "#2196F3",
             Parameters = { new ParameterDefinition { Key = "DateRule", Label = "Date Range (YYYY-MM-DD:YYYY-MM-DD)", Type = "Text", DefaultValue = "2020-01-01:2030-12-31" } },
-            Factory = () => new DateRangeFilterNode(string.Empty),
+            Factory = (sp) => new DateRangeFilterNode(string.Empty),
             ApplyParameters = (node, parameters) => { if (node is DateRangeFilterNode n && parameters.TryGetValue("DateRule", out var val)) n.DateRule = val; }
         });
 
@@ -134,7 +134,7 @@ public static class BuiltInNodeRegistrar
             IsPreviewOnly = true,
             AccentColor = "#9C27B0",
             Parameters = { new ParameterDefinition { Key = "SortRule", Label = "Sort Rule (field:dir)", Type = "Dropdown", DefaultValue = "date:desc", Options = new List<string> { "date:desc", "date:asc", "size:desc", "size:asc", "name:asc" } } },
-            Factory = () => new SortNode(string.Empty),
+            Factory = (sp) => new SortNode(string.Empty),
             ApplyParameters = (node, parameters) => { if (node is SortNode n && parameters.TryGetValue("SortRule", out var val)) n.SortRule = val; }
         });
 
@@ -147,7 +147,7 @@ public static class BuiltInNodeRegistrar
             IsPreviewOnly = true,
             AccentColor = "#9C27B0",
             Parameters = { new ParameterDefinition { Key = "MaxCount", Label = "Max Files", Type = "Number", DefaultValue = "100" } },
-            Factory = () => new LimitNode(100),
+            Factory = (sp) => new LimitNode(100),
             ApplyParameters = (node, parameters) => { if (node is LimitNode n && parameters.TryGetValue("MaxCount", out var val) && int.TryParse(val, out int count)) n.MaxCount = count; }
         });
         

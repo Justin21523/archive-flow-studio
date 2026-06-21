@@ -1,8 +1,24 @@
+using ArchiveFlow.Infrastructure.Database;
+using CommunityToolkit.Mvvm.ComponentModel;
+
 namespace ArchiveFlow.App.ViewModels;
 
-// We will use NodeCanvasViewModel directly as the DataContext for MainWindow.
-// This file can be kept empty or deleted, but to avoid breaking references, 
-// let's just make it a simple placeholder or remove its usage.
-public class MainWindowViewModel
+/// <summary>
+/// Root ViewModel for the main application window.
+/// </summary>
+public partial class MainWindowViewModel : ObservableObject
 {
+    [ObservableProperty]
+    private string _title = "ArchiveFlow Studio";
+
+    [ObservableProperty]
+    private string _statusMessage = "Application initialized.";
+
+    [ObservableProperty]
+    private string _databasePath = string.Empty;
+
+    public MainWindowViewModel(IDatabaseConnectionFactory databaseConnectionFactory)
+    {
+        DatabasePath = databaseConnectionFactory.DatabasePath;
+    }
 }

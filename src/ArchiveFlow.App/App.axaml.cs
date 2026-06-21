@@ -1,21 +1,19 @@
-using Avalonia;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Markup.Xaml;
+using System;
 using ArchiveFlow.App.ViewModels;
 using ArchiveFlow.App.Views;
-using Microsoft.Extensions.DependencyInjection;
 using ArchiveFlow.Application.Interfaces;
+using ArchiveFlow.Application;
 using ArchiveFlow.Infrastructure.Database;
 using ArchiveFlow.Infrastructure.Database.Repositories;
-using ArchiveFlow.Infrastructure.FileSystem;
-using ArchiveFlow.Infrastructure.Hashing;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Markup.Xaml;
 using FluentMigrator.Runner;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using System;
 
 namespace ArchiveFlow.App;
 
-public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. 解決衝突
+public partial class App : Avalonia.Application
 {
     public static IServiceProvider Services { get; private set; } = null!;
 
@@ -24,95 +22,54 @@ public partial class App : Avalonia.Application // <--- 這裡加上 Avalonia. �
         AvaloniaXamlLoader.Load(this);
     }
 
-    public async override void OnFrameworkInitializationCompleted()
+    public override void OnFrameworkInitializationCompleted()
     {
-        // DB columns are snake_case (file_name, file_extension, ...) while entities are PascalCase.
-        // Enable Dapper underscore matching so `SELECT *` maps correctly (otherwise FileName/FileExtension come back empty).
-        Dapper.DefaultTypeMap.MatchNamesWithUnderscores = true;
+        var serviceCollection = new ServiceCollection();
+        ConfigureServices(serviceCollection);
 
-        var services = new ServiceCollection();
-        ConfigureServices(services);
-        Services = services.BuildServiceProvider();
+        Services = serviceCollection.BuildServiceProvider();
 
-        var dbInitializer = Services.GetRequiredService<IDatabaseInitializer>();
-        dbInitializer.Initialize();
-        
-        // Register all built-in nodes into the registry
-        var nodeRegistry = Services.GetRequiredService<ArchiveFlow.Application.Services.NodeRegistry>();
-        ArchiveFlow.Application.Services.BuiltInNodeRegistrar.RegisterAll(nodeRegistry, Services);
+        var databaseInitializer = Services.GetRequiredService<IDatabaseInitializer>();
+        databaseInitializer.Initialize();
 
-        var pluginManager = Services.GetRequiredService<ArchiveFlow.Infrastructure.Services.PluginManager>();
-        pluginManager.LoadPlugins();
-        // Initialize Mock Data if database is empty
-        var mockDataService = Services.GetRequiredService<ArchiveFlow.Application.Interfaces.IMockDataService>();
-        await mockDataService.GenerateMockDataAsync();
-        
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow
             {
-                DataContext = Services.GetRequiredService<NodeCanvasViewModel>(),
+                DataContext = Services.GetRequiredService<MainWindowViewModel>()
             };
         }
 
         base.OnFrameworkInitializationCompleted();
     }
 
-    private void ConfigureServices(IServiceCollection services)
+    private static void ConfigureServices(IServiceCollection services)
     {
         services.AddLogging(builder =>
         {
             builder.AddConsole();
-            builder.SetMinimumLevel(LogLevel.Debug);
+            builder.SetMinimumLevel(LogLevel.Information);
         });
 
-        services.AddSingleton<IFileHashingService, Sha256FileHashingService>();
-        services.AddTransient<IFileScanner, LocalFileScanner>();
-        services.AddSingleton<IFileRepository, SqliteFileRepository>();
-        services.AddTransient<ArchiveFlow.Application.Workflows.WorkflowEngine>();
-        services.AddTransient<ArchiveFlow.App.ViewModels.NodeCanvasViewModel>();
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.IMetadataRepository, ArchiveFlow.Infrastructure.Database.Repositories.SqliteMetadataRepository>();
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.ISearchService, ArchiveFlow.Infrastructure.Search.SqliteSearchService>();
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.IWorkflowStorageService, ArchiveFlow.Infrastructure.Storage.LocalWorkflowStorageService>();
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.IFilePreviewService, ArchiveFlow.Infrastructure.Preview.FilePreviewService>();
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.IMockDataService, ArchiveFlow.Infrastructure.Services.MockDataService>();
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.IAutoTaggingService, ArchiveFlow.Infrastructure.Services.LocalKeywordTaggingService>();
-        // Register the background batch job service as a singleton
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.IBatchJobService, ArchiveFlow.Infrastructure.Services.BackgroundBatchJobService>();
-        services.AddSingleton<ArchiveFlow.Application.Services.NodeRegistry>();
-        services.AddSingleton<ArchiveFlow.Infrastructure.Services.PluginManager>();
-        services.AddTransient<ArchiveFlow.App.ViewModels.DatabaseManagerViewModel>();
-        // Register Relationship Repository
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.IRelationshipRepository, ArchiveFlow.Infrastructure.Database.Repositories.SqliteRelationshipRepository>();
-        // Register Graph Explorer ViewModel
-        services.AddTransient<ArchiveFlow.App.ViewModels.GraphExplorerViewModel>();
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.IDublinCoreExportService, ArchiveFlow.Infrastructure.Export.DublinCoreExportService>();
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.IStatisticsService, ArchiveFlow.Infrastructure.Services.SqliteStatisticsService>();
-        services.AddTransient<ArchiveFlow.App.ViewModels.DashboardViewModel>();
-        // Register Smart Collection Repository
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.ISmartCollectionRepository, ArchiveFlow.Infrastructure.Database.Repositories.SqliteSmartCollectionRepository>();
-        // Register Statistics Service
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.IStatisticsService, ArchiveFlow.Infrastructure.Services.SqliteStatisticsService>();
-        // Register Dashboard ViewModel
-        services.AddTransient<ArchiveFlow.App.ViewModels.DashboardViewModel>();
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.IFullTextSearchService, 
-    ArchiveFlow.Infrastructure.Search.FullTextSearchService>();
-        services.AddSingleton<ArchiveFlow.Application.Interfaces.IFileOperationService, ArchiveFlow.Infrastructure.FileSystem.LocalFileOperationService>();
-        
-        services.AddFluentMigratorCore()
-            .ConfigureRunner(rb => rb
-                .AddSQLite()
-                .WithGlobalConnectionString(GetConnectionString())
-                .ScanIn(typeof(DatabaseInitializer).Assembly).For.Migrations());
-        
-        services.AddSingleton<IDatabaseInitializer, DatabaseInitializer>();
-        services.AddTransient<MainWindowViewModel>();
-    }
+        services.AddSingleton<IDatabaseConnectionFactory, SqliteConnectionFactory>();
 
-    private static string GetConnectionString()
-    {
-        var dbPath = System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "Data", "archiveflow.db");
-        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(dbPath)!);
-        return $"Data Source={dbPath};";
+        services.AddFluentMigratorCore()
+            .ConfigureRunner(builder =>
+            {
+                var factory = new SqliteConnectionFactory();
+
+                builder
+                    .AddSQLite()
+                    .WithGlobalConnectionString(factory.ConnectionString)
+                    .ScanIn(typeof(DatabaseInitializer).Assembly)
+                    .For.Migrations();
+            })
+            .AddLogging(builder => builder.AddFluentMigratorConsole());
+
+        services.AddSingleton<IDatabaseInitializer, DatabaseInitializer>();
+
+        services.AddSingleton<IFileRepository, SqliteFileRepository>();
+
+        services.AddTransient<MainWindowViewModel>();
     }
 }

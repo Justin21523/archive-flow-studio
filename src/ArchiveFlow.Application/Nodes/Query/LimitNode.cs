@@ -11,6 +11,11 @@ namespace ArchiveFlow.Application.Nodes.Query;
 public class LimitNode : IArchiveNode
 {
     public int MaxResults { get; set; }
+    public int MaxCount
+    {
+        get => MaxResults;
+        set => MaxResults = value;
+    }
 
     public Guid Id { get; } = Guid.NewGuid();
     public string DisplayName => $"Limit: {MaxResults}";

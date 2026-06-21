@@ -55,7 +55,7 @@ public class FilePreviewService : IFilePreviewService
         // 如果縮圖已存在且檔案未修改，則跳過
         if (File.Exists(thumbnailPath)) 
         {
-            file.ThumbnailPath = thumbnailPath;
+            file.UpdateThumbnailPath(thumbnailPath);
             return;
         }
 
@@ -64,7 +64,7 @@ public class FilePreviewService : IFilePreviewService
         image.Mutate(x => x.Resize(new ResizeOptions { Size = new Size(300, 0), Mode = ResizeMode.Max }));
         await image.SaveAsJpegAsync(thumbnailPath);
         
-        file.ThumbnailPath = thumbnailPath;
+        file.UpdateThumbnailPath(thumbnailPath);
         _logger.LogInformation("Generated thumbnail for {FileName}", file.FileName);
     }
 
@@ -77,7 +77,7 @@ public class FilePreviewService : IFilePreviewService
         var buffer = new char[1000];
         var readCount = await reader.ReadAsync(buffer, 0, buffer.Length);
         
-        file.ContentPreview = new string(buffer, 0, readCount);
+        file.UpdateContentPreview(new string(buffer, 0, readCount));
     }
 
     private bool IsImage(string ext) => new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp" }.Contains(ext.ToLowerInvariant());

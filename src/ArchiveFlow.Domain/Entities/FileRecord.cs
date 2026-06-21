@@ -1,12 +1,12 @@
-using System;
-using System.IO;
 using ArchiveFlow.Domain.Enums;
 
 namespace ArchiveFlow.Domain.Entities;
 
+/// <summary>
+/// Represents a file tracked by ArchiveFlow Studio.
+/// </summary>
 public class FileRecord
 {
-    // 使用 string 來存儲 Guid，避免 Dapper 解析錯誤
     public string Id { get; private set; } = string.Empty;
     public string ArchiveId { get; private set; } = string.Empty;
     public string FilePath { get; private set; } = string.Empty;
@@ -20,17 +20,25 @@ public class FileRecord
     public DateTime ImportedAt { get; private set; }
     public DateTime? ModifiedAt { get; private set; }
     public DateTime? LastScannedAt { get; private set; }
-    public string? ThumbnailPath { get; set; }
-    public string? ContentPreview { get; set; }
-    
-    // Parameterless constructor for Dapper
-    public FileRecord() { }
 
-    public static FileRecord Create(string filePath, string fileHash, long fileSize, string mimeType)
+    public string ThumbnailPath { get; private set; } = string.Empty;
+    public string ContentPreview { get; private set; } = string.Empty;
+
+    public FileRecord()
     {
+    }
+
+    public static FileRecord Create(
+        string filePath,
+        string fileHash,
+        long fileSize,
+        string mimeType)
+    {
+        var now = DateTime.UtcNow;
+
         return new FileRecord
         {
-            Id = Guid.NewGuid().ToString(),
+            Id = Guid.NewGuid().ToString("N"),
             ArchiveId = GenerateArchiveId(),
             FilePath = filePath,
             FileName = Path.GetFileName(filePath),
@@ -39,15 +47,45 @@ public class FileRecord
             FileSize = fileSize,
             MimeType = mimeType,
             Status = (int)FileStatus.New,
-            CreatedAt = DateTime.UtcNow,
-            ImportedAt = DateTime.UtcNow,
-            ModifiedAt = File.GetLastWriteTimeUtc(filePath)
+            CreatedAt = now,
+            ImportedAt = now,
+            ModifiedAt = File.Exists(filePath) ? File.GetLastWriteTimeUtc(filePath) : now
         };
     }
 
     public void UpdateStatus(FileStatus newStatus)
     {
         Status = (int)newStatus;
+    }
+
+    public void MarkAsScanned()
+    {
+        LastScannedAt = DateTime.UtcNow;
+        Status = (int)FileStatus.Scanned;
+    }
+
+    public void UpdatePath(string newPath)
+    {
+        FilePath = newPath;
+        FileName = Path.GetFileName(newPath);
+        FileExtension = Path.GetExtension(newPath).ToLowerInvariant();
+        ModifiedAt = DateTime.UtcNow;
+    }
+
+    public void UpdatePreview(string contentPreview, string thumbnailPath = "")
+    {
+        ContentPreview = contentPreview;
+        ThumbnailPath = thumbnailPath;
+    }
+
+    public void UpdateContentPreview(string contentPreview)
+    {
+        ContentPreview = contentPreview;
+    }
+
+    public void UpdateThumbnailPath(string thumbnailPath)
+    {
+        ThumbnailPath = thumbnailPath;
     }
 
     public void UpdateFileSize(long fileSize)
@@ -58,28 +96,18 @@ public class FileRecord
         }
 
         FileSize = fileSize;
-    }
-
-    public void UpdatePath(string filePath)
-    {
-        if (string.IsNullOrWhiteSpace(filePath))
-        {
-            throw new ArgumentException("File path cannot be empty.", nameof(filePath));
-        }
-
-        FilePath = filePath;
-        FileName = Path.GetFileName(filePath);
-        FileExtension = Path.GetExtension(filePath).ToLowerInvariant();
-        ModifiedAt = File.Exists(filePath) ? File.GetLastWriteTimeUtc(filePath) : DateTime.UtcNow;
+        ModifiedAt = DateTime.UtcNow;
     }
 
     public FileStatus GetStatus()
     {
-        return (FileStatus)Status;
+        return Enum.IsDefined(typeof(FileStatus), Status)
+            ? (FileStatus)Status
+            : FileStatus.New;
     }
 
     private static string GenerateArchiveId()
     {
-        return $"AFA-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
+        return $"AF-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
     }
 }

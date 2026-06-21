@@ -7,7 +7,7 @@ namespace ArchiveFlow.Application.Nodes.Query;
 
 /// <summary>
 /// Filters files based on date range (imported_at or modified_at).
-/// Parameter format: "field:operator:value" e.g., "imported:>2024-01-01"
+/// Parameter format: "YYYY-MM-DD:YYYY-MM-DD" or "field:operator:value" e.g., "imported:>2024-01-01".
 /// </summary>
 public class DateRangeFilterNode : IArchiveNode
 {
@@ -27,14 +27,23 @@ public class DateRangeFilterNode : IArchiveNode
     {
         if (string.IsNullOrWhiteSpace(DateRule)) return Task.CompletedTask;
 
-        var parts = DateRule.Split(':', 2);
-        if (parts.Length != 2) return Task.CompletedTask;
+        var parts = DateRule.Split(':');
+        if (parts.Length == 2 && DateTime.TryParse(parts[0], out var minDate) && DateTime.TryParse(parts[1], out var maxDate))
+        {
+            var rangeFiltered = context.CurrentFileSet
+                .Where(file => file.ImportedAt >= minDate && file.ImportedAt <= maxDate)
+                .ToList();
+
+            context.SetFileSet(rangeFiltered);
+            return Task.CompletedTask;
+        }
+
+        if (parts.Length < 2) return Task.CompletedTask;
 
         var dateField = parts[0].Trim().ToLowerInvariant();
-        var condition = parts[1].Trim();
+        var condition = string.Join(':', parts.Skip(1)).Trim();
 
-        DateTime targetDate;
-        if (!DateTime.TryParse(condition.TrimStart('>', '<', '='), out targetDate))
+        if (!DateTime.TryParse(condition.TrimStart('>', '<', '='), out var targetDate))
         {
             return Task.CompletedTask;
         }

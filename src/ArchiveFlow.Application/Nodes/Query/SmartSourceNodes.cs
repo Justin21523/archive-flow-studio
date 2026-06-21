@@ -28,13 +28,26 @@ public class MissingMetadataNode : IArchiveNode
 
     public async Task ExecuteAsync(NodeExecutionContext context, CancellationToken cancellationToken = default)
     {
-        var allFiles = await _fileRepository.GetAllAsync(cancellationToken);
-        var filesWithMeta = await _metadataRepository.GetAllFilesWithMetadataAsync(); // 需新增此方法或自行實作邏輯
-        
-        // 簡化邏輯：找出沒有 metadata 的檔案
-        var missingIds = allFiles.Select(f => f.Id).Except(filesWithMeta.Select(f => f.Id));
-        var result = allFiles.Where(f => missingIds.Contains(f.Id)).ToList();
-        
+        var allFiles = (await _fileRepository.GetAllAsync(cancellationToken)).ToList();
+        var requiredFields = (await _metadataRepository.GetAllFieldsAsync())
+            .Where(field => field.IsRequired)
+            .Select(field => field.Id)
+            .ToHashSet();
+
+        var result = new List<FileRecord>();
+        foreach (var file in allFiles)
+        {
+            var metadata = (await _metadataRepository.GetMetadataByFileIdAsync(file.Id)).ToList();
+            var hasMissingRequiredField = requiredFields.Count > 0 &&
+                !requiredFields.IsSubsetOf(metadata.Select(value => value.FieldId));
+            var hasNoMetadata = requiredFields.Count == 0 && metadata.Count == 0;
+
+            if (hasMissingRequiredField || hasNoMetadata)
+            {
+                result.Add(file);
+            }
+        }
+
         context.SetFileSet(result);
     }
 }

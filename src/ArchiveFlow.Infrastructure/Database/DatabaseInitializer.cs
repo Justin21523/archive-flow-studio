@@ -3,36 +3,44 @@ using Microsoft.Extensions.Logging;
 
 namespace ArchiveFlow.Infrastructure.Database;
 
+/// <summary>
+/// Initializes the database and applies pending migrations.
+/// </summary>
 public interface IDatabaseInitializer
 {
     void Initialize();
 }
 
-public class DatabaseInitializer : IDatabaseInitializer
+public sealed class DatabaseInitializer : IDatabaseInitializer
 {
-    private readonly IMigrationRunner _runner;
+    private readonly IMigrationRunner _migrationRunner;
+    private readonly IDatabaseConnectionFactory _connectionFactory;
     private readonly ILogger<DatabaseInitializer> _logger;
 
-    public DatabaseInitializer(IMigrationRunner runner, ILogger<DatabaseInitializer> logger)
+    public DatabaseInitializer(
+        IMigrationRunner migrationRunner,
+        IDatabaseConnectionFactory connectionFactory,
+        ILogger<DatabaseInitializer> logger)
     {
-        _runner = runner;
+        _migrationRunner = migrationRunner;
+        _connectionFactory = connectionFactory;
         _logger = logger;
     }
 
     public void Initialize()
     {
-        _logger.LogInformation("Starting database initialization...");
-        
+        Directory.CreateDirectory(Path.GetDirectoryName(_connectionFactory.DatabasePath)!);
+
+        _logger.LogInformation("Initializing database at {DatabasePath}", _connectionFactory.DatabasePath);
+
         try
         {
-            // MigrateUp() will automatically skip migrations that have already been applied.
-            _logger.LogInformation("Applying pending database migrations...");
-            _runner.MigrateUp();
-            _logger.LogInformation("Database migrations applied successfully.");
+            _migrationRunner.MigrateUp();
+            _logger.LogInformation("Database initialization completed.");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to initialize database.");
+            _logger.LogError(ex, "Database initialization failed.");
             throw;
         }
     }

@@ -1,36 +1,41 @@
-cd ~/web-projects/ArchiveFlow
-
-cat << 'EOF' > .gitignore
-## .NET
+# Build output
 bin/
 obj/
+[Bb]in/
+[Oo]bj/
+
+# User-specific files
 *.user
 *.suo
-*.cache
-*.vs/
+*.rsuser
+*.userosscache
+*.sln.docstates
+
+# IDE
+.vs/
 .vscode/
-*.swp
-*.dotCover
+.idea/
 
-## Database
-Data/
-*.db
-*.db-shm
-*.db-wal
+# NuGet
+*.nupkg
+*.snupkg
+packages/
 
-## OS
+# Logs
+logs/
+*.log
+
+# Local database runtime files
+Data/*.db
+Data/*.db-shm
+Data/*.db-wal
+
+# OS files
 .DS_Store
 Thumbs.db
 
-## Node/JS (if any WebView stuff later)
-node_modules/
-EOF
-
-
-# Published releases
-publish/
-
-# Build output
-*.exe
-*.dll
-*.pdb
+# Test results
+TestResults/
+coverage/
+*.coverage
+*.coveragexml

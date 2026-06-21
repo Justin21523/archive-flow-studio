@@ -7,7 +7,7 @@ namespace ArchiveFlow.Application.Nodes.Query;
 
 /// <summary>
 /// Filters files based on file size.
-/// Parameter format: "operator:value" e.g., ">5000000" (5MB)
+/// Parameter format: "min:max" or an operator expression such as ">5000000" or "<=10MB".
 /// </summary>
 public class SizeFilterNode : IArchiveNode
 {
@@ -27,23 +27,24 @@ public class SizeFilterNode : IArchiveNode
     {
         if (string.IsNullOrWhiteSpace(SizeRule)) return Task.CompletedTask;
 
-        long sizeBytes;
         string condition = SizeRule.Trim();
 
-        if (condition.EndsWith("MB", StringComparison.OrdinalIgnoreCase))
+        var rangeParts = condition.Split(':', 2);
+        if (rangeParts.Length == 2)
         {
-            if (!long.TryParse(condition.Replace("MB", ""), out long mb)) return Task.CompletedTask;
-            sizeBytes = mb * 1024 * 1024;
+            var min = ParseSize(rangeParts[0], 0);
+            var max = ParseSize(rangeParts[1], long.MaxValue);
+
+            var rangeFiltered = context.CurrentFileSet
+                .Where(file => file.FileSize >= min && file.FileSize <= max)
+                .ToList();
+
+            context.SetFileSet(rangeFiltered);
+            return Task.CompletedTask;
         }
-        else if (condition.EndsWith("KB", StringComparison.OrdinalIgnoreCase))
-        {
-            if (!long.TryParse(condition.Replace("KB", ""), out long kb)) return Task.CompletedTask;
-            sizeBytes = kb * 1024;
-        }
-        else
-        {
-            if (!long.TryParse(condition.TrimStart('>', '<', '='), out sizeBytes)) return Task.CompletedTask;
-        }
+
+        var sizeBytes = ParseSize(condition.TrimStart('>', '<', '='), -1);
+        if (sizeBytes < 0) return Task.CompletedTask;
 
         var filtered = context.CurrentFileSet.Where(file =>
         {
@@ -56,5 +57,22 @@ public class SizeFilterNode : IArchiveNode
 
         context.SetFileSet(filtered);
         return Task.CompletedTask;
+    }
+
+    private static long ParseSize(string value, long fallback)
+    {
+        var condition = value.Trim();
+
+        if (condition.EndsWith("MB", StringComparison.OrdinalIgnoreCase))
+        {
+            return long.TryParse(condition[..^2].Trim(), out var mb) ? mb * 1024 * 1024 : fallback;
+        }
+
+        if (condition.EndsWith("KB", StringComparison.OrdinalIgnoreCase))
+        {
+            return long.TryParse(condition[..^2].Trim(), out var kb) ? kb * 1024 : fallback;
+        }
+
+        return long.TryParse(condition, out var bytes) ? bytes : fallback;
     }
 }

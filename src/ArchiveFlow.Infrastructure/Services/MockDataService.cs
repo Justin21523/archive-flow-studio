@@ -102,7 +102,8 @@ public class MockDataService : IMockDataService
             }
 
             var record = await CreateFileRecordAsync(filePath, "image/png");
-            record.ContentPreview = $"Image file {fileName}. Contains visual data.";
+            record.UpdateContentPreview($"Image file {fileName}. Contains visual data.");
+            await SaveGeneratedRecordAsync(record);
             
             // Add realistic metadata
             await AddMetadataAsync(record.Id, "tag", i % 2 == 0 ? "Media" : "Archive");
@@ -145,7 +146,8 @@ public class MockDataService : IMockDataService
             }
 
             var record = await CreateFileRecordAsync(filePath, mimeType);
-            record.ContentPreview = content.Substring(0, Math.Min(content.Length, 500)); // Store preview
+            record.UpdateContentPreview(content.Substring(0, Math.Min(content.Length, 500))); // Store preview
+            await SaveGeneratedRecordAsync(record);
 
             // Add metadata based on content keywords
             var tags = ExtractTags(content);
@@ -173,7 +175,8 @@ public class MockDataService : IMockDataService
             var record = await CreateFileRecordAsync(filePath, "text/csv");
             // Simulate large file size in DB
             record.UpdateFileSize(50_000_000 + (i * 1_000_000)); // 50MB+
-            record.ContentPreview = "Large dataset file. Preview truncated.";
+            record.UpdateContentPreview("Large dataset file. Preview truncated.");
+            await SaveGeneratedRecordAsync(record);
             
             await AddMetadataAsync(record.Id, "tag", "Data");
             await AddMetadataAsync(record.Id, "tag", "LargeFile");
@@ -205,7 +208,8 @@ public class MockDataService : IMockDataService
             };
 
             var record = await CreateFileRecordAsync(filePath, mimeType);
-            record.ContentPreview = $"3D/Media asset: {fileName}";
+            record.UpdateContentPreview($"3D/Media asset: {fileName}");
+            await SaveGeneratedRecordAsync(record);
             
             await AddMetadataAsync(record.Id, "tag", "Asset");
             await AddMetadataAsync(record.Id, "tag", ext.TrimStart('.'));
@@ -229,6 +233,12 @@ public class MockDataService : IMockDataService
         await _fileRepository.SaveAsync(record);
         await _searchService.IndexFileAsync(record);
         return record;
+    }
+
+    private async Task SaveGeneratedRecordAsync(FileRecord record)
+    {
+        await _fileRepository.SaveAsync(record);
+        await _searchService.IndexFileAsync(record);
     }
 
     private async Task AddMetadataAsync(string fileId, string fieldName, string value)
