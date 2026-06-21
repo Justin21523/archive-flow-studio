@@ -39,7 +39,21 @@ public partial class NodeCanvasViewModel : ObservableObject
 
     [ObservableProperty]
     private string _statusMessage = "Node workspace ready.";
+    
+    [ObservableProperty]
+    private string _inspectorPreviewTitle = "Preview";
 
+    [ObservableProperty]
+    private string _inspectorPreviewSummary = "-";
+
+    [ObservableProperty]
+    private string _inspectorQueryOrOperationTitle = "Query / Operation";
+
+    [ObservableProperty]
+    private string _inspectorQueryOrOperationText = "-";
+
+    [ObservableProperty]
+    private string _inspectorWarnings = "-";
     [ObservableProperty]
     private string _inspectorTitle = "No node selected";
 
@@ -304,7 +318,13 @@ public partial class NodeCanvasViewModel : ObservableObject
                 var outputFiles = await ExecuteNodeAsync(node, inputFiles);
 
                 node.SetRunStats(inputFiles.Count, outputFiles.Count);
+                node.RefreshPreview();
 
+                if (SelectedNode == node)
+                {
+                    RefreshInspector(node);
+                }
+                
                 if (node.Definition.IsActionNode)
                 {
                     node.Status = $"Preview ready ({outputFiles.Count})";
@@ -430,6 +450,9 @@ public partial class NodeCanvasViewModel : ObservableObject
 
         foreach (var parameter in node.Parameters)
         {
+            parameter.ValueChanged -= OnSelectedNodeParameterChanged;
+            parameter.ValueChanged += OnSelectedNodeParameterChanged;
+
             InspectorParameters.Add(parameter);
         }
 
@@ -440,7 +463,26 @@ public partial class NodeCanvasViewModel : ObservableObject
         InspectorDescription = node.Description;
         InspectorMode = node.ModeText;
         InspectorPorts = $"Input ports: {node.InputCount}, Output ports: {node.OutputCount}";
-        InspectorParameterSummary = node.GetParameterSummary();
+        InspectorParameterSummary = node.ParameterSummary;
+
+        InspectorPreviewTitle = node.Definition.IsActionNode ? "Action Preview" : "Query Preview";
+        InspectorPreviewSummary = node.PreviewSummary;
+
+        InspectorQueryOrOperationTitle = node.Definition.IsActionNode ? "Operation" : "SQL-like Expression";
+        InspectorQueryOrOperationText = node.OperationPreview;
+
+        InspectorWarnings = BuildInspectorWarnings(node);
+    }
+
+    private void OnSelectedNodeParameterChanged(object? sender, EventArgs e)
+    {
+        if (SelectedNode == null)
+        {
+            return;
+        }
+
+        SelectedNode.RefreshPreview();
+        RefreshInspector(SelectedNode);
     }
 
     private void ClearInspector()
@@ -455,6 +497,38 @@ public partial class NodeCanvasViewModel : ObservableObject
         InspectorMode = "-";
         InspectorPorts = "-";
         InspectorParameterSummary = "-";
+        InspectorPreviewTitle = "Preview";
+        InspectorPreviewSummary = "-";
+        InspectorQueryOrOperationTitle = "Query / Operation";
+        InspectorQueryOrOperationText = "-";
+        InspectorWarnings = "-";
+    }
+
+    private string BuildInspectorWarnings(NodeInstanceViewModel node)
+    {
+        var warnings = new List<string>();
+
+        if (node.InputPort != null && Edges.All(edge => edge.TargetNode != node))
+        {
+            warnings.Add("No input connection.");
+        }
+
+        if (node.OutputPort != null && Edges.All(edge => edge.SourceNode != node))
+        {
+            warnings.Add("No output connection.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(node.WarningSummary) && node.WarningSummary != "No warnings.")
+        {
+            warnings.Add(node.WarningSummary);
+        }
+
+        if (warnings.Count == 0)
+        {
+            return "No warnings.";
+        }
+
+        return string.Join("\n", warnings.Distinct());
     }
 
     private PortInstanceViewModel? FindInputPortAt(double x, double y)

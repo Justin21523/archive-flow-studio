@@ -1,8 +1,8 @@
+using Avalonia.Controls.Shapes;
 using ArchiveFlow.Application.Nodes.Definitions;
 using ArchiveFlow.App.ViewModels;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 
@@ -18,7 +18,7 @@ public partial class NodeCanvasView : UserControl
         InitializeComponent();
     }
 
-    public Canvas WorkspaceCanvas => this.FindControl<Canvas>("WorkspaceCanvas")!;
+    public Canvas WorkspaceCanvasControl => this.FindControl<Canvas>("WorkspaceCanvas")!;
 
     private NodeCanvasViewModel? ViewModel => DataContext as NodeCanvasViewModel;
 
