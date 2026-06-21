@@ -32,6 +32,30 @@ public static class BuiltInNodeRegistrar
                 sp.GetRequiredService<ISearchService>(),
                 sp.GetRequiredService<IFilePreviewService>())
         });
+        registry.Register(new NodeDefinition
+        {
+            NodeType = "MissingMetadata",
+            DisplayName = "Missing Metadata",
+            Category = NodeCategory.Source,
+            SubCategory = "Smart Sources",
+            IsPreviewOnly = true,
+            AccentColor = "#FF9800",
+            Factory = (sp) => new MissingMetadataNode(
+                sp.GetRequiredService<IFileRepository>(),
+                sp.GetRequiredService<IMetadataRepository>())
+        });
+
+        registry.Register(new NodeDefinition
+        {
+            NodeType = "DuplicateFiles",
+            DisplayName = "Duplicate Files",
+            Category = NodeCategory.Source,
+            SubCategory = "Smart Sources",
+            IsPreviewOnly = true,
+            AccentColor = "#F44336",
+            Factory = (sp) => new DuplicateFilesNode(
+                sp.GetRequiredService<IFileRepository>())
+        });
 
         // --- PROCESSORS (FILTERS) ---
         registry.Register(new NodeDefinition
@@ -48,6 +72,31 @@ public static class BuiltInNodeRegistrar
                 new PortDefinition { Name = "Output", DataType = PortDataType.FileSet, IsInput = false }
             },
             Factory = (sp) => new FileTypeFilterNode(".txt")
+        });
+        registry.Register(new NodeDefinition
+        {
+            NodeType = "SizeFilter",
+            DisplayName = "Size Filter",
+            Category = NodeCategory.Processor,
+            SubCategory = "File Property Filters",
+            IsPreviewOnly = true,
+            AccentColor = "#2196F3",
+            Parameters = { new ParameterDefinition { Key = "SizeRule", Label = "Size Range (min:max)", Type = "Text", DefaultValue = "0:1048576" } },
+            Factory = () => new SizeFilterNode(string.Empty),
+            ApplyParameters = (node, parameters) => { if (node is SizeFilterNode n && parameters.TryGetValue("SizeRule", out var val)) n.SizeRule = val; }
+        });
+
+        registry.Register(new NodeDefinition
+        {
+            NodeType = "DateRangeFilter",
+            DisplayName = "Date Range Filter",
+            Category = NodeCategory.Processor,
+            SubCategory = "File Property Filters",
+            IsPreviewOnly = true,
+            AccentColor = "#2196F3",
+            Parameters = { new ParameterDefinition { Key = "DateRule", Label = "Date Range (YYYY-MM-DD:YYYY-MM-DD)", Type = "Text", DefaultValue = "2020-01-01:2030-12-31" } },
+            Factory = () => new DateRangeFilterNode(string.Empty),
+            ApplyParameters = (node, parameters) => { if (node is DateRangeFilterNode n && parameters.TryGetValue("DateRule", out var val)) n.DateRule = val; }
         });
 
         registry.Register(new NodeDefinition
@@ -75,7 +124,33 @@ public static class BuiltInNodeRegistrar
                 }
             }
         });
+        // --- LOGIC ---
+        registry.Register(new NodeDefinition
+        {
+            NodeType = "Sort",
+            DisplayName = "Sort Files",
+            Category = NodeCategory.Processor,
+            SubCategory = "Logic & Set Operations",
+            IsPreviewOnly = true,
+            AccentColor = "#9C27B0",
+            Parameters = { new ParameterDefinition { Key = "SortRule", Label = "Sort Rule (field:dir)", Type = "Dropdown", DefaultValue = "date:desc", Options = new List<string> { "date:desc", "date:asc", "size:desc", "size:asc", "name:asc" } } },
+            Factory = () => new SortNode(string.Empty),
+            ApplyParameters = (node, parameters) => { if (node is SortNode n && parameters.TryGetValue("SortRule", out var val)) n.SortRule = val; }
+        });
 
+        registry.Register(new NodeDefinition
+        {
+            NodeType = "Limit",
+            DisplayName = "Limit Count",
+            Category = NodeCategory.Processor,
+            SubCategory = "Logic & Set Operations",
+            IsPreviewOnly = true,
+            AccentColor = "#9C27B0",
+            Parameters = { new ParameterDefinition { Key = "MaxCount", Label = "Max Files", Type = "Number", DefaultValue = "100" } },
+            Factory = () => new LimitNode(100),
+            ApplyParameters = (node, parameters) => { if (node is LimitNode n && parameters.TryGetValue("MaxCount", out var val) && int.TryParse(val, out int count)) n.MaxCount = count; }
+        });
+        
         // --- ACTIONS ---
         registry.Register(new NodeDefinition
         {

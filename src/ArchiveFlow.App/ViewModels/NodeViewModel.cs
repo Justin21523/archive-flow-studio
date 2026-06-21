@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using ArchiveFlow.Application.Nodes.Definitions;
+using ArchiveFlow.Domain.Entities;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ArchiveFlow.App.ViewModels;
@@ -38,6 +39,8 @@ public partial class NodeViewModel : ObservableObject
     public ObservableCollection<NodeParameterViewModel> Parameters { get; } = new();
     public PortViewModel InputPort { get; }
     public PortViewModel OutputPort { get; }
+    public ObservableCollection<FileRecord> OutputFiles { get; } = new();
+    
     // Badge properties for UI display
     public string BadgeText => IsPreviewOnly ? "PREVIEW" : "ACTION";
     public string BadgeColor => IsPreviewOnly ? "#4CAF50" : "#FF9800";

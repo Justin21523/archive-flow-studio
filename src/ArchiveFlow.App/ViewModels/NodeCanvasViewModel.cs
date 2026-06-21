@@ -75,6 +75,18 @@ public partial class NodeCanvasViewModel : ObservableObject
     [ObservableProperty] private Avalonia.Media.Imaging.Bitmap? _selectedFileThumbnail;
     [ObservableProperty] private string _selectedFilePreviewText = string.Empty;
     [ObservableProperty] private NodeViewModel? _selectedNode;
+
+    partial void OnSelectedNodeChanged(NodeViewModel? value)
+    {
+        ResultFiles.Clear();
+        if (value != null)
+        {
+            foreach (var file in value.OutputFiles)
+            {
+                ResultFiles.Add(file);
+            }
+        }
+    }
     [ObservableProperty] private double _canvasViewportCenterX = 1500;
     [ObservableProperty] private double _canvasViewportCenterY = 1000;
     [ObservableProperty] private BatchJobInfo _currentBatchJob = new() { JobName = "Idle", StatusMessage = "No active jobs." };
@@ -443,6 +455,18 @@ public partial class NodeCanvasViewModel : ObservableObject
     // --- Update the CreateBackendNode method to include new cases ---
     private IArchiveNode CreateBackendNode(NodeViewModel vm)
     {
+        var regDef = _nodeRegistry?.GetDefinition(vm.NodeType);
+        if (regDef != null && regDef.Factory != null)
+        {
+            var node = regDef.Factory(_serviceProvider);
+            if (regDef.ApplyParameters != null)
+            {
+                var paramDict = vm.Parameters.ToDictionary(p => p.Key, p => p.Value);
+                regDef.ApplyParameters(node, paramDict);
+            }
+            return node;
+        }
+
         // 輔助方法：從 Parameters 集合中安全取得數值
         string GetParam(string label, string fallback = "") 
         {
@@ -748,16 +772,49 @@ public partial class NodeCanvasViewModel : ObservableObject
         ExecutionLog = "--- PHASE 1: PREVIEW ---\n";
         ResultFiles.Clear();
 
+        foreach (var node in Nodes)
+        {
+            node.OutputFiles.Clear();
+            node.Status = "Idle";
+        }
+
         try
         {
             var sortedNodes = GetTopologicalOrder();
-            
-            // Phase 1: Preview Mode
             var previewContext = new NodeExecutionContext { IsPreviewMode = true };
+
             foreach (var nodeVm in sortedNodes)
             {
+                nodeVm.Status = "Running";
+                
+                // Gather inputs from incoming edges
+                var parentEdges = Edges.Where(e => e.Target.ParentNode == nodeVm).ToList();
+                if (parentEdges.Count > 0)
+                {
+                    // Merge files from all parent nodes
+                    var inputFiles = parentEdges
+                        .SelectMany(e => e.Source.ParentNode.OutputFiles)
+                        .GroupBy(f => f.Id)
+                        .Select(g => g.First())
+                        .ToList();
+                    previewContext.SetFileSet(inputFiles);
+                }
+                else
+                {
+                    previewContext.ClearFileSet();
+                }
+
                 var backendNode = CreateBackendNode(nodeVm);
                 await backendNode.ExecuteAsync(previewContext, CancellationToken.None);
+                
+                // Store results for this node
+                foreach (var file in previewContext.CurrentFileSet)
+                {
+                    nodeVm.OutputFiles.Add(file);
+                }
+                
+                nodeVm.Status = $"Preview ({nodeVm.OutputFiles.Count})";
+                ExecutionLog += $"[{nodeVm.Title}] Previewed: {nodeVm.OutputFiles.Count} files\n";
             }
 
             // Display Preview Messages
@@ -767,7 +824,23 @@ public partial class NodeCanvasViewModel : ObservableObject
             }
             ExecutionLog += "\n--- WAITING FOR CONFIRMATION ---\nReview the preview above. Click 'Apply Changes' to execute physical operations.\n";
             
-            // Store the context for the Apply phase (In a real app, use a better state management)
+            // Sync ResultFiles with the currently selected node
+            if (SelectedNode != null)
+            {
+                foreach (var file in SelectedNode.OutputFiles)
+                {
+                    ResultFiles.Add(file);
+                }
+            }
+            else
+            {
+                var firstResultNode = Nodes.FirstOrDefault(n => n.NodeType == "Result");
+                if (firstResultNode != null)
+                {
+                    foreach (var file in firstResultNode.OutputFiles) ResultFiles.Add(file);
+                }
+            }
+            
             _lastPreviewContext = previewContext; 
             _sortedNodesForApply = sortedNodes;
         }
@@ -783,36 +856,78 @@ public partial class NodeCanvasViewModel : ObservableObject
         if (!HasPendingActions) return;
 
         ExecutionLog += "Applying changes...\n";
+        ResultFiles.Clear();
+        
+        foreach (var node in Nodes)
+        {
+            node.OutputFiles.Clear();
+        }
+
         var sortedNodes = GetTopologicalOrder();
         var context = new NodeExecutionContext();
         
-        // Re-execute Query Nodes to restore context state
+        // Re-execute Query Nodes and Action Nodes to restore context state and apply
         foreach (var nodeVm in sortedNodes)
         {
+            nodeVm.Status = "Running";
+            
+            // Gather inputs from incoming edges
+            var parentEdges = Edges.Where(e => e.Target.ParentNode == nodeVm).ToList();
+            if (parentEdges.Count > 0)
+            {
+                var inputFiles = parentEdges
+                    .SelectMany(e => e.Source.ParentNode.OutputFiles)
+                    .GroupBy(f => f.Id)
+                    .Select(g => g.First())
+                    .ToList();
+                context.SetFileSet(inputFiles);
+            }
+            else
+            {
+                context.ClearFileSet();
+            }
+
             var backendNode = CreateBackendNode(nodeVm);
             if (backendNode is not IActionNode)
             {
                 await backendNode.ExecuteAsync(context);
+                nodeVm.Status = $"Success ({context.CurrentFileSet.Count})";
             }
-        }
-
-        // Execute Action Nodes
-        foreach (var nodeVm in sortedNodes)
-        {
-            var backendNode = CreateBackendNode(nodeVm);
-            if (backendNode is IActionNode actionNode)
+            else if (backendNode is IActionNode actionNode)
             {
                 nodeVm.Status = "Applying...";
                 await actionNode.ApplyAsync(context);
                 nodeVm.Status = "Applied";
                 ExecutionLog += $"[{nodeVm.Title}] Applied successfully.\n";
-                
-                // TODO: Log to Batch Job Service here
+            }
+
+            // Store results for this node
+            foreach (var file in context.CurrentFileSet)
+            {
+                nodeVm.OutputFiles.Add(file);
             }
         }
+
         HasPendingActions = false;
         PendingPreviews.Clear();
         ExecutionLog += "All changes applied and saved.\n";
+
+        // Sync ResultFiles with the currently selected node
+        if (SelectedNode != null)
+        {
+            foreach (var file in SelectedNode.OutputFiles)
+            {
+                ResultFiles.Add(file);
+            }
+        }
+        else
+        {
+            var firstResultNode = Nodes.FirstOrDefault(n => n.NodeType == "Result");
+            if (firstResultNode != null)
+            {
+                foreach (var file in firstResultNode.OutputFiles) ResultFiles.Add(file);
+            }
+        }
     }          
 
     // 5. 新增 Apply Command
@@ -826,6 +941,12 @@ public partial class NodeCanvasViewModel : ObservableObject
         }
 
         ExecutionLog += "--- PHASE 2: APPLYING CHANGES ---\n";
+        ResultFiles.Clear();
+
+        foreach (var node in Nodes)
+        {
+            node.OutputFiles.Clear();
+        }
         
         try
         {
@@ -833,9 +954,34 @@ public partial class NodeCanvasViewModel : ObservableObject
             foreach (var nodeVm in _sortedNodesForApply)
             {
                 nodeVm.Status = "Applying...";
+                
+                // Gather inputs from incoming edges
+                var parentEdges = Edges.Where(e => e.Target.ParentNode == nodeVm).ToList();
+                if (parentEdges.Count > 0)
+                {
+                    var inputFiles = parentEdges
+                        .SelectMany(e => e.Source.ParentNode.OutputFiles)
+                        .GroupBy(f => f.Id)
+                        .Select(g => g.First())
+                        .ToList();
+                    applyContext.SetFileSet(inputFiles);
+                }
+                else
+                {
+                    applyContext.ClearFileSet();
+                }
+
                 var backendNode = CreateBackendNode(nodeVm);
                 await backendNode.ExecuteAsync(applyContext, CancellationToken.None);
-                nodeVm.Status = "Applied";
+                
+                // Store results for this node
+                foreach (var file in applyContext.CurrentFileSet)
+                {
+                    nodeVm.OutputFiles.Add(file);
+                }
+
+                nodeVm.Status = $"Applied ({nodeVm.OutputFiles.Count})";
+                ExecutionLog += $"[{nodeVm.Title}] Applied successfully with {nodeVm.OutputFiles.Count} files.\n";
             }
 
             foreach (var msg in applyContext.PreviewMessages)
@@ -844,6 +990,23 @@ public partial class NodeCanvasViewModel : ObservableObject
             }
             ExecutionLog += "\n--- ALL CHANGES APPLIED SUCCESSFULLY ---\n";
             
+            // Sync ResultFiles with the currently selected node
+            if (SelectedNode != null)
+            {
+                foreach (var file in SelectedNode.OutputFiles)
+                {
+                    ResultFiles.Add(file);
+                }
+            }
+            else
+            {
+                var firstResultNode = Nodes.FirstOrDefault(n => n.NodeType == "Result");
+                if (firstResultNode != null)
+                {
+                    foreach (var file in firstResultNode.OutputFiles) ResultFiles.Add(file);
+                }
+            }
+
             // Refresh results if needed
             _sortedNodesForApply = null;
         }
