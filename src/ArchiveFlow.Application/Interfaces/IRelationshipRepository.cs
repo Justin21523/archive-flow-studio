@@ -10,6 +10,10 @@ namespace ArchiveFlow.Application.Interfaces;
 public interface IRelationshipRepository
 {
     Task CreateRelationshipAsync(string sourceId, string targetId, string relationType);
+    Task<bool> TryCreateRelationshipAsync(string sourceId, string targetId, string relationType);
+    Task<bool> RelationshipExistsAsync(string sourceId, string targetId, string relationType);
+    Task<bool> UpdateRelationshipTypeAsync(int id, string relationType);
+    Task<bool> DeleteRelationshipAsync(int id);
     Task<IEnumerable<FileRelationship>> GetRelationshipsByFileIdAsync(string fileId);
     Task<IEnumerable<FileRelationship>> GetAllRelationshipsAsync();
 }
