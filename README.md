@@ -10,11 +10,11 @@ ArchiveFlow Studio is a learning-focused desktop application for exploring file 
 
 ## Live Demo
 
-- Browser Demo: https://justin21523.github.io/archive-flow-studio/
+- Browser Workspace Demo: https://justin21523.github.io/archive-flow-studio/
 - Browser Demo notes: [docs/browser-demo.md](docs/browser-demo.md)
 - Automation notes: [docs/automation.md](docs/automation.md)
 
-The Browser Demo is an Avalonia WebAssembly static site for online portfolio review. It uses built-in sample data and simulated import/export behavior because GitHub Pages cannot run server-side .NET, native SQLite, or desktop file-system APIs.
+The Browser Workspace Demo is an Avalonia WebAssembly static site for online portfolio review. It opens directly into a workspace-style node canvas with a node library, inspector, result table, pending changes, and mock export preview. It uses built-in sample data and simulated import/export behavior because GitHub Pages cannot run server-side .NET, native SQLite, or desktop file-system APIs.
 
 The Desktop Full Version remains the primary application for local archive workflows.
 
@@ -38,7 +38,7 @@ This repository is in prototype/MVP development. The architecture and core demo 
 - Export job log table and Export Center tab for recent CSV/JSON/Dublin Core export attempts.
 - Import job history table and Import tab history for scan/apply summaries.
 - Export Center v1 with manual all-files export plus export job history; Library selected/visible export writes to the same job log.
-- Browser Demo host using Avalonia WebAssembly, in-memory repositories, built-in sample data, mock import, mock export, relationship creation, and GitHub Pages deployment workflow.
+- Browser Workspace Demo host using Avalonia WebAssembly, in-memory repositories, built-in sample data, a node canvas demo, contextual inspector, result table, pending metadata changes, mock import, mock export, and GitHub Pages deployment workflow.
 - SQLite FTS5 index table, rebuild flow, query modes, Library FTS search mode, and Workspace full-text search node handler.
 - Text extraction for text files, PDF text layers, and DOCX documents, wired into import and FTS rebuild.
 - Relationship table, duplicate-safe repository operations, multi-hop Graph Explorer tab, relationship type filters, manual relationship creation, visible relationship list, edit, and two-step delete flow.
@@ -188,12 +188,12 @@ src/ArchiveFlow.Browser/bin/Release/net10.0-browser/publish/wwwroot
 
 ## Browser Demo Script
 
-1. Open the Browser Demo.
-2. Load a scenario from the scenario selector.
-3. Search or filter the built-in files.
-4. Preview and confirm a mock import.
-5. Create a relationship from a source file to a target file.
-6. Export the filtered result and inspect the generated export preview and job log.
+1. Open the Browser Workspace Demo.
+2. Review the default `All Files -> Extension Filter -> Keyword Search -> Add Tag Preview -> Result Table` workflow.
+3. Drag a node, middle-drag to pan, or use the mouse wheel to zoom the canvas.
+4. Select different nodes and confirm the inspector changes with node-specific purpose, parameters, and output.
+5. Search or filter the built-in files, then run the workflow.
+6. Apply pending metadata changes or export the filtered result and inspect the generated preview.
 
 ## License
 

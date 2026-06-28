@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Browser Demo lets reviewers open ArchiveFlow Studio from GitHub Pages without installing a desktop app. It is an online product tour, not a replacement for the full desktop version.
+The Browser Demo lets reviewers open ArchiveFlow Studio from GitHub Pages without installing a desktop app. It opens directly into a workspace-style node canvas so reviewers can see the product's core interaction first. It is an online product tour, not a replacement for the full desktop version.
 
 Live Demo URL:
 
@@ -25,6 +25,7 @@ Browser Demo Version:
 - Runs as a static WebAssembly app published from `ArchiveFlow.Browser`.
 - Uses in-memory demo storage.
 - Ships with built-in sample archive records.
+- Opens with a browser-safe node canvas, contextual inspector, result table, pending changes, and export preview.
 - Simulates import scanning with deterministic sample files.
 - Generates export content in memory and records export jobs.
 - Does not read arbitrary local paths, write local files, or use native SQLite.
@@ -33,9 +34,14 @@ Browser Demo Version:
 
 - Reset demo data.
 - Load demo scenarios.
+- Review the default workspace workflow: `All Files -> Extension Filter -> Keyword Search -> Add Tag Preview -> Result Table`.
+- Drag nodes, middle-drag to pan, and use the mouse wheel to zoom the canvas.
+- Select nodes and inspect node-specific purpose, parameters, and current output.
 - Browse built-in files.
 - Search filename, path, metadata, and preview text.
 - Filter by extension.
+- Execute the demo workflow and preview pending metadata changes.
+- Apply pending metadata changes to in-memory demo records.
 - Preview and confirm a mock import.
 - Create source-to-target file relationships.
 - View relationship records.
@@ -54,7 +60,7 @@ Browser Demo Version:
 - GitHub Pages is a static host. It cannot run server-side .NET or a desktop executable.
 - Browser sandbox rules block unrestricted local folder scanning and direct local export paths.
 - The demo does not connect to the desktop SQLite database.
-- The demo does not use the desktop node canvas or OS shell integrations.
+- The demo uses a browser-safe workspace canvas, not the full desktop `NodeCanvasViewModel` runtime or OS shell integrations.
 - Large production archives should be reviewed in the Desktop Full Version.
 
 ## Local Browser Commands

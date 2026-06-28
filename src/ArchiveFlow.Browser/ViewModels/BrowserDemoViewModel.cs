@@ -23,6 +23,10 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
     public ObservableCollection<FileRelationship> Relationships { get; } = [];
     public ObservableCollection<ExportJobRecord> ExportJobs { get; } = [];
     public ObservableCollection<ImportJobRecord> ImportJobs { get; } = [];
+    public ObservableCollection<BrowserNodeLibraryGroup> NodeLibraryGroups { get; } = [];
+    public ObservableCollection<BrowserWorkflowNode> WorkflowNodes { get; } = [];
+    public ObservableCollection<BrowserWorkflowEdge> WorkflowEdges { get; } = [];
+    public ObservableCollection<BrowserPendingChange> PendingChanges { get; } = [];
 
     public IReadOnlyList<string> Scenarios { get; } =
     [
@@ -101,8 +105,35 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
     [ObservableProperty]
     private int _relationshipCount;
 
+    [ObservableProperty]
+    private double _canvasZoom = 1;
+
+    [ObservableProperty]
+    private double _canvasOffsetX = 0;
+
+    [ObservableProperty]
+    private double _canvasOffsetY = 0;
+
+    [ObservableProperty]
+    private BrowserWorkflowNode? _selectedWorkflowNode;
+
+    [ObservableProperty]
+    private string _inspectorTitle = "Workspace Overview";
+
+    [ObservableProperty]
+    private string _inspectorDescription = "Select a node to inspect its parameters and preview how it affects the demo workflow.";
+
+    [ObservableProperty]
+    private string _workflowSummary = "Ready to execute the browser workspace demo.";
+
+    [ObservableProperty]
+    private string _selectedNodeKind = "Workspace";
+
+    [ObservableProperty]
+    private string _selectedNodeOutput = "No node selected.";
+
     public string DemoNotice =>
-        "This is the Browser Demo version. Some desktop-only features such as local folder scanning, native database storage, and direct file system export are simulated for online demonstration.";
+        "Browser Workspace Demo: local folder scanning, native SQLite storage, and direct file-system export are simulated for online review.";
 
     public string DesktopNotice => "Desktop Full Version is available from GitHub Releases.";
 
@@ -118,6 +149,7 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         _importPipelineService = importPipelineService;
         _exportService = exportService;
         _dataStore = dataStore;
+        BuildWorkspaceDemo();
         _ = RefreshAllAsync();
     }
 
@@ -136,6 +168,21 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         _ = LoadSelectedMetadataAsync(value);
     }
 
+    partial void OnSelectedWorkflowNodeChanged(BrowserWorkflowNode? value)
+    {
+        foreach (var node in WorkflowNodes)
+        {
+            node.IsSelected = ReferenceEquals(node, value);
+        }
+
+        InspectorTitle = value?.Title ?? "Workspace Overview";
+        InspectorDescription = value?.Description ?? "Select a node to inspect its parameters and preview how it affects the demo workflow.";
+        SelectedNodeKind = value?.Kind ?? "Workspace";
+        SelectedNodeOutput = value is null
+            ? $"Current result contains {FilteredFiles.Count} files. Use the demo nodes to understand source, filter, search, metadata, and output behavior."
+            : value.OutputLabel;
+    }
+
     [RelayCommand]
     private async Task ResetDemoDataAsync()
     {
@@ -145,6 +192,7 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         ImportSummary = "Demo data reset.";
         StatusMessage = "Demo data reset.";
         await RefreshAllAsync();
+        UpdateWorkflowCounts();
     }
 
     [RelayCommand]
@@ -156,6 +204,7 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         ImportSummary = $"{SelectedScenario} scenario loaded.";
         StatusMessage = $"{SelectedScenario} scenario loaded.";
         await RefreshAllAsync();
+        UpdateWorkflowCounts();
     }
 
     [RelayCommand]
@@ -216,6 +265,67 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ExecuteWorkflow()
+    {
+        ApplyFilter();
+        PendingChanges.Clear();
+
+        var actionNode = WorkflowNodes.FirstOrDefault(node => node.Id == "metadata-action");
+        if (actionNode is not null)
+        {
+            foreach (var file in FilteredFiles.Take(5))
+            {
+                PendingChanges.Add(new BrowserPendingChange(
+                    file.FileName,
+                    "Add tag",
+                    "browser-demo"));
+            }
+        }
+
+        WorkflowSummary = PendingChanges.Count == 0
+            ? $"Workflow executed. {FilteredFiles.Count} files reached the result table."
+            : $"Workflow executed. {FilteredFiles.Count} files reached the result table and {PendingChanges.Count} metadata changes are ready to apply.";
+        StatusMessage = WorkflowSummary;
+        UpdateWorkflowCounts();
+    }
+
+    [RelayCommand]
+    private async Task ApplyPendingChangesAsync()
+    {
+        if (PendingChanges.Count == 0)
+        {
+            StatusMessage = "No pending metadata changes to apply.";
+            return;
+        }
+
+        var fileNames = PendingChanges.Select(change => change.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in Files.Where(row => fileNames.Contains(row.FileName)))
+        {
+            await _repository.Metadata.AddMetadataValueIfMissingAsync(
+                row.Id,
+                "tag",
+                "Tag",
+                "String",
+                "Descriptive",
+                "browser-demo");
+        }
+
+        PendingChanges.Clear();
+        StatusMessage = "Browser demo metadata changes applied in memory.";
+        await RefreshFilesAsync();
+        UpdateWorkflowCounts();
+    }
+
+    [RelayCommand]
+    private void ResetCanvasView()
+    {
+        CanvasZoom = 1;
+        CanvasOffsetX = 0;
+        CanvasOffsetY = 0;
+        StatusMessage = "Canvas view reset.";
+    }
+
+    [RelayCommand]
     private async Task ExportFilteredAsync()
     {
         var files = FilteredFiles.Select(row => row.Record).ToList();
@@ -242,6 +352,30 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         ExportPreview = _dataStore.LastExportContent;
         StatusMessage = result.Message;
         await RefreshJobsAsync();
+        UpdateWorkflowCounts();
+    }
+
+    public void SelectWorkflowNode(BrowserWorkflowNode node)
+    {
+        SelectedWorkflowNode = node;
+    }
+
+    public void MoveWorkflowNode(BrowserWorkflowNode node, double x, double y)
+    {
+        node.X = Math.Max(20, Math.Min(1420, x));
+        node.Y = Math.Max(20, Math.Min(820, y));
+        RecalculateEdges();
+    }
+
+    public void PanCanvas(double deltaX, double deltaY)
+    {
+        CanvasOffsetX += deltaX;
+        CanvasOffsetY += deltaY;
+    }
+
+    public void ZoomCanvas(double factor)
+    {
+        CanvasZoom = Math.Max(0.55, Math.Min(1.8, CanvasZoom * factor));
     }
 
     private async Task RefreshAllAsync()
@@ -301,6 +435,7 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         }
 
         FilteredCount = FilteredFiles.Count;
+        UpdateWorkflowCounts();
     }
 
     private async Task RefreshRelationshipsAsync()
@@ -312,6 +447,7 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         }
 
         RelationshipCount = Relationships.Count;
+        UpdateWorkflowCounts();
     }
 
     private async Task RefreshJobsAsync()
@@ -328,6 +464,220 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
             ImportJobs.Add(job);
         }
     }
+
+    private void BuildWorkspaceDemo()
+    {
+        NodeLibraryGroups.Clear();
+        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Source", ["All Files", "Recent Imports", "Missing Metadata"]));
+        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Filter", ["Extension", "Metadata Field", "Status"]));
+        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Search", ["Keyword", "Full Text", "Boolean"]));
+        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Actions", ["Add Tag", "Create Relationship"]));
+        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Output", ["Result Table", "CSV Export", "Dublin Core XML"]));
+
+        WorkflowNodes.Clear();
+        WorkflowNodes.Add(new BrowserWorkflowNode(
+            "source-all",
+            "All Files",
+            "Source",
+            "Loads every sample archive file from the in-memory Browser Demo repository.",
+            "Output: all demo files.",
+            40,
+            110,
+            "#3E6B8C",
+            [new BrowserNodeParameter("Archive", "Browser demo sample data")]));
+        WorkflowNodes.Add(new BrowserWorkflowNode(
+            "filter-extension",
+            "Extension Filter",
+            "Filter",
+            "Keeps only files matching the selected extension filter. Choose All to pass every file.",
+            "Output updates when the extension filter changes.",
+            185,
+            110,
+            "#6B7D3E",
+            [new BrowserNodeParameter("Extension", "Bound to the toolbar extension dropdown")]));
+        WorkflowNodes.Add(new BrowserWorkflowNode(
+            "search-keyword",
+            "Keyword Search",
+            "Search",
+            "Searches filename, path, preview text, and metadata summary.",
+            "Output updates when the search box changes.",
+            330,
+            110,
+            "#7A5C9E",
+            [new BrowserNodeParameter("Query", "Bound to the toolbar search field")]));
+        WorkflowNodes.Add(new BrowserWorkflowNode(
+            "metadata-action",
+            "Add Tag Preview",
+            "Metadata Action",
+            "Creates pending metadata changes first; Apply writes them to the in-memory demo repository.",
+            "Preview-only until Apply Pending Changes is clicked.",
+            475,
+            110,
+            "#A66A3D",
+            [new BrowserNodeParameter("Tag", "browser-demo")]));
+        WorkflowNodes.Add(new BrowserWorkflowNode(
+            "output-result",
+            "Result Table",
+            "Output",
+            "Displays the final file set and can export the current result.",
+            "Result table receives the filtered file set.",
+            620,
+            110,
+            "#3F7A62",
+            [new BrowserNodeParameter("View", "Result files + export preview")]));
+
+        WorkflowEdges.Clear();
+        WorkflowEdges.Add(new BrowserWorkflowEdge(WorkflowNodes[0], WorkflowNodes[1]));
+        WorkflowEdges.Add(new BrowserWorkflowEdge(WorkflowNodes[1], WorkflowNodes[2]));
+        WorkflowEdges.Add(new BrowserWorkflowEdge(WorkflowNodes[2], WorkflowNodes[3]));
+        WorkflowEdges.Add(new BrowserWorkflowEdge(WorkflowNodes[3], WorkflowNodes[4]));
+
+        SelectedWorkflowNode = WorkflowNodes.FirstOrDefault();
+        RecalculateEdges();
+    }
+
+    private void RecalculateEdges()
+    {
+        foreach (var edge in WorkflowEdges)
+        {
+            edge.Recalculate();
+        }
+    }
+
+    private void UpdateWorkflowCounts()
+    {
+        if (WorkflowNodes.Count == 0)
+        {
+            return;
+        }
+
+        var allCount = Files.Count;
+        var filteredCount = FilteredFiles.Count;
+        SetOutput("source-all", $"{allCount} files loaded from browser demo data.");
+        SetOutput("filter-extension", SelectedExtensionFilter == "All"
+            ? $"{allCount} files pass because extension filter is All."
+            : $"{filteredCount} files match {SelectedExtensionFilter}.");
+        SetOutput("search-keyword", string.IsNullOrWhiteSpace(SearchText)
+            ? $"{filteredCount} files pass because no query is set."
+            : $"{filteredCount} files match \"{SearchText.Trim()}\".");
+        SetOutput("metadata-action", PendingChanges.Count == 0
+            ? "Run workflow to preview metadata tag changes."
+            : $"{PendingChanges.Count} pending metadata tag changes.");
+        SetOutput("output-result", $"{filteredCount} files visible in the result table.");
+        OnSelectedWorkflowNodeChanged(SelectedWorkflowNode);
+    }
+
+    private void SetOutput(string nodeId, string value)
+    {
+        var node = WorkflowNodes.FirstOrDefault(item => item.Id == nodeId);
+        if (node is not null)
+        {
+            node.OutputLabel = value;
+        }
+    }
+}
+
+public sealed class BrowserNodeLibraryGroup(string name, IReadOnlyList<string> nodes)
+{
+    public string Name { get; } = name;
+
+    public IReadOnlyList<string> Nodes { get; } = nodes;
+}
+
+public sealed partial class BrowserWorkflowNode : ObservableObject
+{
+    public BrowserWorkflowNode(
+        string id,
+        string title,
+        string kind,
+        string description,
+        string outputLabel,
+        double x,
+        double y,
+        string color,
+        IReadOnlyList<BrowserNodeParameter> parameters)
+    {
+        Id = id;
+        Title = title;
+        Kind = kind;
+        Description = description;
+        OutputLabel = outputLabel;
+        X = x;
+        Y = y;
+        Color = color;
+        Parameters = parameters;
+    }
+
+    public string Id { get; }
+
+    public string Title { get; }
+
+    public string Kind { get; }
+
+    public string Description { get; }
+
+    public string Color { get; }
+
+    public IReadOnlyList<BrowserNodeParameter> Parameters { get; }
+
+    public double Width => 145;
+
+    public double Height => 108;
+
+    [ObservableProperty]
+    private double _x;
+
+    [ObservableProperty]
+    private double _y;
+
+    [ObservableProperty]
+    private bool _isSelected;
+
+    [ObservableProperty]
+    private string _outputLabel = string.Empty;
+}
+
+public sealed class BrowserNodeParameter(string name, string value)
+{
+    public string Name { get; } = name;
+
+    public string Value { get; } = value;
+}
+
+public sealed partial class BrowserWorkflowEdge : ObservableObject
+{
+    public BrowserWorkflowEdge(BrowserWorkflowNode source, BrowserWorkflowNode target)
+    {
+        Source = source;
+        Target = target;
+        Recalculate();
+    }
+
+    public BrowserWorkflowNode Source { get; }
+
+    public BrowserWorkflowNode Target { get; }
+
+    [ObservableProperty]
+    private string _pathData = string.Empty;
+
+    public void Recalculate()
+    {
+        var startX = Source.X + Source.Width;
+        var startY = Source.Y + Source.Height / 2;
+        var endX = Target.X;
+        var endY = Target.Y + Target.Height / 2;
+        var controlOffset = Math.Max(80, (endX - startX) / 2);
+        PathData = $"M {startX:0.##},{startY:0.##} C {startX + controlOffset:0.##},{startY:0.##} {endX - controlOffset:0.##},{endY:0.##} {endX:0.##},{endY:0.##}";
+    }
+}
+
+public sealed class BrowserPendingChange(string fileName, string action, string value)
+{
+    public string FileName { get; } = fileName;
+
+    public string Action { get; } = action;
+
+    public string Value { get; } = value;
 }
 
 public sealed class BrowserFileRow
