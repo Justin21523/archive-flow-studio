@@ -14,7 +14,7 @@ ArchiveFlow Studio is a learning-focused desktop application for exploring file 
 - Browser Demo notes: [docs/browser-demo.md](docs/browser-demo.md)
 - Automation notes: [docs/automation.md](docs/automation.md)
 
-The Browser Workspace Demo is an Avalonia WebAssembly static site for online portfolio review. It opens directly into a workspace-style node canvas with a node library, inspector, result table, pending changes, and mock export preview. It uses built-in sample data and simulated import/export behavior because GitHub Pages cannot run server-side .NET, native SQLite, or desktop file-system APIs.
+The Browser Workspace Demo is an Avalonia WebAssembly static site for online portfolio review. It opens directly into a workspace-style node canvas with a node library, colored node types, node add/delete/duplicate controls, editable connections, grouping, resizing, contextual inspector, result tabs, relationships, pending changes, mock import, job logs, and mock export preview. It uses built-in sample data and simulated import/export behavior because GitHub Pages cannot run server-side .NET, native SQLite, or desktop file-system APIs.
 
 The Desktop Full Version remains the primary application for local archive workflows.
 
@@ -38,7 +38,7 @@ This repository is in prototype/MVP development. The architecture and core demo 
 - Export job log table and Export Center tab for recent CSV/JSON/Dublin Core export attempts.
 - Import job history table and Import tab history for scan/apply summaries.
 - Export Center v1 with manual all-files export plus export job history; Library selected/visible export writes to the same job log.
-- Browser Workspace Demo host using Avalonia WebAssembly, in-memory repositories, built-in sample data, a node canvas demo, contextual inspector, result table, pending metadata changes, mock import, mock export, and GitHub Pages deployment workflow.
+- Browser Workspace Demo host using Avalonia WebAssembly, in-memory repositories, built-in sample data, a node canvas demo, node add/delete/duplicate, connection editing, grouping, node resizing, contextual inspector, result tabs, pending metadata changes, mock import, mock export, and GitHub Pages deployment workflow.
 - SQLite FTS5 index table, rebuild flow, query modes, Library FTS search mode, and Workspace full-text search node handler.
 - Text extraction for text files, PDF text layers, and DOCX documents, wired into import and FTS rebuild.
 - Relationship table, duplicate-safe repository operations, multi-hop Graph Explorer tab, relationship type filters, manual relationship creation, visible relationship list, edit, and two-step delete flow.
@@ -190,10 +190,13 @@ src/ArchiveFlow.Browser/bin/Release/net10.0-browser/publish/wwwroot
 
 1. Open the Browser Workspace Demo.
 2. Review the default `All Files -> Extension Filter -> Keyword Search -> Add Tag Preview -> Result Table` workflow.
-3. Drag a node, middle-drag to pan, or use the mouse wheel to zoom the canvas.
-4. Select different nodes and confirm the inspector changes with node-specific purpose, parameters, and output.
-5. Search or filter the built-in files, then run the workflow.
-6. Apply pending metadata changes or export the filtered result and inspect the generated preview.
+3. Add a node from the Node Library, duplicate it, resize it, or delete it.
+4. Select a node as a link source, select another node, then create or delete a connection.
+5. Create a group around the selected workflow area.
+6. Drag a node, middle-drag to pan, or use the mouse wheel to zoom the canvas.
+7. Select different nodes and confirm the inspector changes with node-specific purpose, parameters, and output.
+8. Search or filter the built-in files, run the workflow, and review the Results, Relationships, and Import / Jobs tabs.
+9. Apply pending metadata changes or export the filtered result and inspect the generated preview.
 
 ## License
 

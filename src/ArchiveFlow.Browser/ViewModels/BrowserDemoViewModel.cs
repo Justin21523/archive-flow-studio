@@ -26,7 +26,12 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
     public ObservableCollection<BrowserNodeLibraryGroup> NodeLibraryGroups { get; } = [];
     public ObservableCollection<BrowserWorkflowNode> WorkflowNodes { get; } = [];
     public ObservableCollection<BrowserWorkflowEdge> WorkflowEdges { get; } = [];
+    public ObservableCollection<BrowserWorkflowGroup> WorkflowGroups { get; } = [];
     public ObservableCollection<BrowserPendingChange> PendingChanges { get; } = [];
+
+    private int _nextNodeNumber = 1;
+    private int _nextGroupNumber = 1;
+    private BrowserWorkflowNode? _pendingConnectionSource;
 
     public IReadOnlyList<string> Scenarios { get; } =
     [
@@ -118,6 +123,9 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
     private BrowserWorkflowNode? _selectedWorkflowNode;
 
     [ObservableProperty]
+    private BrowserWorkflowEdge? _selectedWorkflowEdge;
+
+    [ObservableProperty]
     private string _inspectorTitle = "Workspace Overview";
 
     [ObservableProperty]
@@ -131,6 +139,9 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
 
     [ObservableProperty]
     private string _selectedNodeOutput = "No node selected.";
+
+    [ObservableProperty]
+    private string _connectionStatus = "Select a node, mark it as the link source, then select another node and connect.";
 
     public string DemoNotice =>
         "Browser Workspace Demo: local folder scanning, native SQLite storage, and direct file-system export are simulated for online review.";
@@ -175,12 +186,36 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
             node.IsSelected = ReferenceEquals(node, value);
         }
 
+        if (value is not null)
+        {
+            SelectedWorkflowEdge = null;
+        }
+
         InspectorTitle = value?.Title ?? "Workspace Overview";
         InspectorDescription = value?.Description ?? "Select a node to inspect its parameters and preview how it affects the demo workflow.";
         SelectedNodeKind = value?.Kind ?? "Workspace";
         SelectedNodeOutput = value is null
             ? $"Current result contains {FilteredFiles.Count} files. Use the demo nodes to understand source, filter, search, metadata, and output behavior."
             : value.OutputLabel;
+    }
+
+    partial void OnSelectedWorkflowEdgeChanged(BrowserWorkflowEdge? value)
+    {
+        foreach (var edge in WorkflowEdges)
+        {
+            edge.IsSelected = ReferenceEquals(edge, value);
+        }
+
+        if (value is null)
+        {
+            return;
+        }
+
+        SelectedWorkflowNode = null;
+        InspectorTitle = "Connection";
+        InspectorDescription = $"{value.Source.Title} sends its output to {value.Target.Title}.";
+        SelectedNodeKind = "Workflow Edge";
+        SelectedNodeOutput = "Delete this connection or select nodes to create a different route.";
     }
 
     [RelayCommand]
@@ -283,9 +318,212 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         }
 
         WorkflowSummary = PendingChanges.Count == 0
-            ? $"Workflow executed. {FilteredFiles.Count} files reached the result table."
-            : $"Workflow executed. {FilteredFiles.Count} files reached the result table and {PendingChanges.Count} metadata changes are ready to apply.";
+            ? $"Workflow executed through {WorkflowNodes.Count} nodes and {WorkflowEdges.Count} connections. {FilteredFiles.Count} files reached the result table."
+            : $"Workflow executed through {WorkflowNodes.Count} nodes and {WorkflowEdges.Count} connections. {FilteredFiles.Count} files reached the result table and {PendingChanges.Count} metadata changes are ready to apply.";
         StatusMessage = WorkflowSummary;
+        UpdateWorkflowCounts();
+    }
+
+    [RelayCommand]
+    private void AddNode(BrowserNodeLibraryItem? item)
+    {
+        if (item is null)
+        {
+            StatusMessage = "Choose a node type from the node library.";
+            return;
+        }
+
+        var anchor = SelectedWorkflowNode ?? WorkflowNodes.LastOrDefault();
+        var x = anchor is null ? 80 : Math.Min(1320, anchor.X + 180);
+        var y = anchor is null ? 120 : anchor.Y + (WorkflowNodes.Count % 2 == 0 ? 135 : 0);
+        var node = new BrowserWorkflowNode(
+            $"demo-node-{_nextNodeNumber++}",
+            item.Title,
+            item.Kind,
+            item.Description,
+            item.OutputLabel,
+            x,
+            Math.Min(760, y),
+            item.Color,
+            item.Parameters);
+
+        WorkflowNodes.Add(node);
+        if (anchor is not null && !ReferenceEquals(anchor, node))
+        {
+            AddEdge(anchor, node);
+        }
+
+        SelectedWorkflowNode = node;
+        StatusMessage = $"Added node: {node.Title}.";
+        UpdateWorkflowCounts();
+    }
+
+    [RelayCommand]
+    private void DuplicateSelectedNode()
+    {
+        if (SelectedWorkflowNode is null)
+        {
+            StatusMessage = "Select a node to duplicate.";
+            return;
+        }
+
+        var source = SelectedWorkflowNode;
+        var copy = new BrowserWorkflowNode(
+            $"demo-node-{_nextNodeNumber++}",
+            $"{source.Title} Copy",
+            source.Kind,
+            source.Description,
+            source.OutputLabel,
+            Math.Min(1320, source.X + 45),
+            Math.Min(760, source.Y + 145),
+            source.Color,
+            source.Parameters.Select(parameter => new BrowserNodeParameter(parameter.Name, parameter.Value)).ToList());
+
+        WorkflowNodes.Add(copy);
+        AddEdge(source, copy);
+        SelectedWorkflowNode = copy;
+        StatusMessage = $"Duplicated node: {source.Title}.";
+        UpdateWorkflowCounts();
+    }
+
+    [RelayCommand]
+    private void DeleteSelectedNode()
+    {
+        if (SelectedWorkflowNode is null)
+        {
+            StatusMessage = "Select a node to delete.";
+            return;
+        }
+
+        var node = SelectedWorkflowNode;
+        foreach (var edge in WorkflowEdges.Where(edge => ReferenceEquals(edge.Source, node) || ReferenceEquals(edge.Target, node)).ToList())
+        {
+            WorkflowEdges.Remove(edge);
+        }
+
+        foreach (var group in WorkflowGroups.Where(group => group.Contains(node)).ToList())
+        {
+            WorkflowGroups.Remove(group);
+        }
+
+        WorkflowNodes.Remove(node);
+        SelectedWorkflowNode = WorkflowNodes.FirstOrDefault();
+        StatusMessage = $"Deleted node: {node.Title}.";
+        UpdateWorkflowCounts();
+    }
+
+    [RelayCommand]
+    private void MarkConnectionSource()
+    {
+        if (SelectedWorkflowNode is null)
+        {
+            ConnectionStatus = "Select a node before marking a link source.";
+            return;
+        }
+
+        _pendingConnectionSource = SelectedWorkflowNode;
+        ConnectionStatus = $"Link source: {_pendingConnectionSource.Title}. Select a target node, then click Connect.";
+        StatusMessage = ConnectionStatus;
+    }
+
+    [RelayCommand]
+    private void ConnectToSelectedNode()
+    {
+        if (_pendingConnectionSource is null || SelectedWorkflowNode is null)
+        {
+            ConnectionStatus = "Mark a source node, then select a target node.";
+            StatusMessage = ConnectionStatus;
+            return;
+        }
+
+        if (ReferenceEquals(_pendingConnectionSource, SelectedWorkflowNode))
+        {
+            ConnectionStatus = "A node cannot connect to itself.";
+            StatusMessage = ConnectionStatus;
+            return;
+        }
+
+        if (AddEdge(_pendingConnectionSource, SelectedWorkflowNode))
+        {
+            ConnectionStatus = $"Connected {_pendingConnectionSource.Title} -> {SelectedWorkflowNode.Title}.";
+        }
+        else
+        {
+            ConnectionStatus = "That connection already exists.";
+        }
+
+        _pendingConnectionSource = null;
+        StatusMessage = ConnectionStatus;
+        UpdateWorkflowCounts();
+    }
+
+    [RelayCommand]
+    private void DeleteSelectedConnection()
+    {
+        if (SelectedWorkflowEdge is null)
+        {
+            StatusMessage = "Select a connection line to delete.";
+            return;
+        }
+
+        var edge = SelectedWorkflowEdge;
+        WorkflowEdges.Remove(edge);
+        SelectedWorkflowEdge = null;
+        StatusMessage = $"Deleted connection: {edge.Source.Title} -> {edge.Target.Title}.";
+        UpdateWorkflowCounts();
+    }
+
+    [RelayCommand]
+    private void GrowSelectedNode()
+    {
+        ResizeSelectedNode(24, 14);
+    }
+
+    [RelayCommand]
+    private void ShrinkSelectedNode()
+    {
+        ResizeSelectedNode(-24, -14);
+    }
+
+    [RelayCommand]
+    private void CreateGroupFromSelectedNode()
+    {
+        if (SelectedWorkflowNode is null)
+        {
+            StatusMessage = "Select a node before creating a group.";
+            return;
+        }
+
+        var seed = SelectedWorkflowNode;
+        var groupedNodes = WorkflowEdges
+            .Where(edge => ReferenceEquals(edge.Source, seed) || ReferenceEquals(edge.Target, seed))
+            .SelectMany(edge => new[] { edge.Source, edge.Target })
+            .Append(seed)
+            .Distinct()
+            .ToList();
+
+        var group = BrowserWorkflowGroup.FromNodes(
+            $"group-{_nextGroupNumber}",
+            $"Workflow Group {_nextGroupNumber++}",
+            groupedNodes);
+        WorkflowGroups.Add(group);
+        StatusMessage = $"Created group: {group.Name}.";
+    }
+
+    [RelayCommand]
+    private void ClearGroups()
+    {
+        WorkflowGroups.Clear();
+        StatusMessage = "Workflow groups cleared.";
+    }
+
+    [RelayCommand]
+    private void ResetWorkflow()
+    {
+        BuildWorkspaceDemo();
+        ApplyFilter();
+        StatusMessage = "Workflow reset to the default browser demo.";
+        WorkflowSummary = "Default browser workspace restored.";
         UpdateWorkflowCounts();
     }
 
@@ -360,10 +598,20 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         SelectedWorkflowNode = node;
     }
 
+    public void SelectWorkflowEdge(BrowserWorkflowEdge edge)
+    {
+        SelectedWorkflowEdge = edge;
+    }
+
     public void MoveWorkflowNode(BrowserWorkflowNode node, double x, double y)
     {
         node.X = Math.Max(20, Math.Min(1420, x));
         node.Y = Math.Max(20, Math.Min(820, y));
+        foreach (var group in WorkflowGroups.Where(group => group.Contains(node)))
+        {
+            group.Recalculate();
+        }
+
         RecalculateEdges();
     }
 
@@ -467,14 +715,44 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
 
     private void BuildWorkspaceDemo()
     {
+        _nextNodeNumber = 1;
+        _nextGroupNumber = 1;
+        _pendingConnectionSource = null;
+        ConnectionStatus = "Select a node, mark it as the link source, then select another node and connect.";
         NodeLibraryGroups.Clear();
-        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Source", ["All Files", "Recent Imports", "Missing Metadata"]));
-        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Filter", ["Extension", "Metadata Field", "Status"]));
-        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Search", ["Keyword", "Full Text", "Boolean"]));
-        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Actions", ["Add Tag", "Create Relationship"]));
-        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Output", ["Result Table", "CSV Export", "Dublin Core XML"]));
+        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Source",
+        [
+            CreateLibraryItem("Source", "All Files", "Loads every file from the browser demo repository.", "#3E6B8C", "Output: all demo files.", "Archive", "Browser demo sample data"),
+            CreateLibraryItem("Source", "Recent Imports", "Shows files from the latest mock import job.", "#3E6B8C", "Output: recent imported files.", "Window", "Latest mock import"),
+            CreateLibraryItem("Source", "Missing Metadata", "Finds files that still need descriptive metadata.", "#3E6B8C", "Output: files missing metadata.", "Completeness", "Required fields")
+        ]));
+        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Filter",
+        [
+            CreateLibraryItem("Filter", "Extension Filter", "Keeps files matching the selected extension filter.", "#6B7D3E", "Output: matching extension files.", "Extension", "Toolbar dropdown"),
+            CreateLibraryItem("Filter", "Metadata Field", "Keeps files matching a metadata field/value rule.", "#6B7D3E", "Output: metadata matches.", "Field", "Tag / Subject / Project"),
+            CreateLibraryItem("Filter", "Status Filter", "Keeps files matching an archive status.", "#6B7D3E", "Output: status matches.", "Status", "Imported / Reviewed")
+        ]));
+        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Search",
+        [
+            CreateLibraryItem("Search", "Keyword Search", "Searches filename, path, preview text, and metadata summary.", "#7A5C9E", "Output: keyword matches.", "Query", "Toolbar search field"),
+            CreateLibraryItem("Search", "Full Text Search", "Demonstrates browser-safe indexed content search over sample text.", "#7A5C9E", "Output: full-text matches.", "Index", "In-memory demo index"),
+            CreateLibraryItem("Search", "Boolean Search", "Demonstrates AND / OR keyword search behavior.", "#7A5C9E", "Output: boolean query matches.", "Query", "metadata AND archive")
+        ]));
+        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Actions",
+        [
+            CreateLibraryItem("Metadata Action", "Add Tag Preview", "Creates pending metadata changes before applying them.", "#A66A3D", "Output: pending metadata changes.", "Tag", "browser-demo"),
+            CreateLibraryItem("Relationship", "Create Relationship", "Creates source-to-target relationship records from selected files.", "#A66A3D", "Output: relationship preview.", "Type", "references"),
+            CreateLibraryItem("Metadata Action", "Set Status", "Previews a file status update for the result set.", "#A66A3D", "Output: pending status changes.", "Status", "Reviewed")
+        ]));
+        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Output",
+        [
+            CreateLibraryItem("Output", "Result Table", "Displays the final file set below the canvas.", "#3F7A62", "Output: result table rows.", "View", "Result files"),
+            CreateLibraryItem("Output", "CSV Export", "Exports the current result as a browser download preview.", "#3F7A62", "Output: CSV export job.", "Format", "CSV"),
+            CreateLibraryItem("Output", "Dublin Core XML", "Exports the current result as a Dublin Core XML preview.", "#3F7A62", "Output: XML export job.", "Format", "Dublin Core XML")
+        ]));
 
         WorkflowNodes.Clear();
+        WorkflowGroups.Clear();
         WorkflowNodes.Add(new BrowserWorkflowNode(
             "source-all",
             "All Files",
@@ -527,13 +805,62 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
             [new BrowserNodeParameter("View", "Result files + export preview")]));
 
         WorkflowEdges.Clear();
-        WorkflowEdges.Add(new BrowserWorkflowEdge(WorkflowNodes[0], WorkflowNodes[1]));
-        WorkflowEdges.Add(new BrowserWorkflowEdge(WorkflowNodes[1], WorkflowNodes[2]));
-        WorkflowEdges.Add(new BrowserWorkflowEdge(WorkflowNodes[2], WorkflowNodes[3]));
-        WorkflowEdges.Add(new BrowserWorkflowEdge(WorkflowNodes[3], WorkflowNodes[4]));
+        AddEdge(WorkflowNodes[0], WorkflowNodes[1]);
+        AddEdge(WorkflowNodes[1], WorkflowNodes[2]);
+        AddEdge(WorkflowNodes[2], WorkflowNodes[3]);
+        AddEdge(WorkflowNodes[3], WorkflowNodes[4]);
 
         SelectedWorkflowNode = WorkflowNodes.FirstOrDefault();
         RecalculateEdges();
+    }
+
+    private BrowserNodeLibraryItem CreateLibraryItem(
+        string kind,
+        string title,
+        string description,
+        string color,
+        string outputLabel,
+        string parameterName,
+        string parameterValue)
+    {
+        return new BrowserNodeLibraryItem(
+            kind,
+            title,
+            description,
+            color,
+            outputLabel,
+            [new BrowserNodeParameter(parameterName, parameterValue)]);
+    }
+
+    private bool AddEdge(BrowserWorkflowNode source, BrowserWorkflowNode target)
+    {
+        if (WorkflowEdges.Any(edge => ReferenceEquals(edge.Source, source) && ReferenceEquals(edge.Target, target)))
+        {
+            return false;
+        }
+
+        WorkflowEdges.Add(new BrowserWorkflowEdge(source, target));
+        RecalculateEdges();
+        return true;
+    }
+
+    private void ResizeSelectedNode(double widthDelta, double heightDelta)
+    {
+        if (SelectedWorkflowNode is null)
+        {
+            StatusMessage = "Select a node to resize.";
+            return;
+        }
+
+        SelectedWorkflowNode.Width = Math.Max(120, Math.Min(240, SelectedWorkflowNode.Width + widthDelta));
+        SelectedWorkflowNode.Height = Math.Max(88, Math.Min(170, SelectedWorkflowNode.Height + heightDelta));
+        foreach (var group in WorkflowGroups.Where(group => group.Contains(SelectedWorkflowNode)))
+        {
+            group.Recalculate();
+        }
+
+        RecalculateEdges();
+        StatusMessage = $"Resized node: {SelectedWorkflowNode.Title}.";
     }
 
     private void RecalculateEdges()
@@ -577,11 +904,32 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
     }
 }
 
-public sealed class BrowserNodeLibraryGroup(string name, IReadOnlyList<string> nodes)
+public sealed class BrowserNodeLibraryGroup(string name, IReadOnlyList<BrowserNodeLibraryItem> nodes)
 {
     public string Name { get; } = name;
 
-    public IReadOnlyList<string> Nodes { get; } = nodes;
+    public IReadOnlyList<BrowserNodeLibraryItem> Nodes { get; } = nodes;
+}
+
+public sealed class BrowserNodeLibraryItem(
+    string kind,
+    string title,
+    string description,
+    string color,
+    string outputLabel,
+    IReadOnlyList<BrowserNodeParameter> parameters)
+{
+    public string Kind { get; } = kind;
+
+    public string Title { get; } = title;
+
+    public string Description { get; } = description;
+
+    public string Color { get; } = color;
+
+    public string OutputLabel { get; } = outputLabel;
+
+    public IReadOnlyList<BrowserNodeParameter> Parameters { get; } = parameters;
 }
 
 public sealed partial class BrowserWorkflowNode : ObservableObject
@@ -620,9 +968,11 @@ public sealed partial class BrowserWorkflowNode : ObservableObject
 
     public IReadOnlyList<BrowserNodeParameter> Parameters { get; }
 
-    public double Width => 145;
+    [ObservableProperty]
+    private double _width = 145;
 
-    public double Height => 108;
+    [ObservableProperty]
+    private double _height = 108;
 
     [ObservableProperty]
     private double _x;
@@ -660,6 +1010,9 @@ public sealed partial class BrowserWorkflowEdge : ObservableObject
     [ObservableProperty]
     private string _pathData = string.Empty;
 
+    [ObservableProperty]
+    private bool _isSelected;
+
     public void Recalculate()
     {
         var startX = Source.X + Source.Width;
@@ -669,6 +1022,63 @@ public sealed partial class BrowserWorkflowEdge : ObservableObject
         var controlOffset = Math.Max(80, (endX - startX) / 2);
         PathData = $"M {startX:0.##},{startY:0.##} C {startX + controlOffset:0.##},{startY:0.##} {endX - controlOffset:0.##},{endY:0.##} {endX:0.##},{endY:0.##}";
     }
+}
+
+public sealed partial class BrowserWorkflowGroup : ObservableObject
+{
+    private readonly IReadOnlyList<BrowserWorkflowNode> _nodes;
+
+    private BrowserWorkflowGroup(string id, string name, IReadOnlyList<BrowserWorkflowNode> nodes)
+    {
+        Id = id;
+        Name = name;
+        _nodes = nodes;
+        Recalculate();
+    }
+
+    public string Id { get; }
+
+    public string Name { get; }
+
+    public static BrowserWorkflowGroup FromNodes(string id, string name, IReadOnlyList<BrowserWorkflowNode> nodes)
+    {
+        return new BrowserWorkflowGroup(id, name, nodes);
+    }
+
+    public bool Contains(BrowserWorkflowNode node)
+    {
+        return _nodes.Any(item => ReferenceEquals(item, node));
+    }
+
+    public void Recalculate()
+    {
+        if (_nodes.Count == 0)
+        {
+            return;
+        }
+
+        var left = _nodes.Min(node => node.X) - 22;
+        var top = _nodes.Min(node => node.Y) - 34;
+        var right = _nodes.Max(node => node.X + node.Width) + 22;
+        var bottom = _nodes.Max(node => node.Y + node.Height) + 22;
+
+        X = Math.Max(0, left);
+        Y = Math.Max(0, top);
+        Width = Math.Max(160, right - X);
+        Height = Math.Max(120, bottom - Y);
+    }
+
+    [ObservableProperty]
+    private double _x;
+
+    [ObservableProperty]
+    private double _y;
+
+    [ObservableProperty]
+    private double _width;
+
+    [ObservableProperty]
+    private double _height;
 }
 
 public sealed class BrowserPendingChange(string fileName, string action, string value)

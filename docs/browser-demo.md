@@ -25,7 +25,7 @@ Browser Demo Version:
 - Runs as a static WebAssembly app published from `ArchiveFlow.Browser`.
 - Uses in-memory demo storage.
 - Ships with built-in sample archive records.
-- Opens with a browser-safe node canvas, contextual inspector, result table, pending changes, and export preview.
+- Opens with a browser-safe node canvas, colored node types, node editing controls, contextual inspector, result tabs, pending changes, relationships, job logs, and export preview.
 - Simulates import scanning with deterministic sample files.
 - Generates export content in memory and records export jobs.
 - Does not read arbitrary local paths, write local files, or use native SQLite.
@@ -35,8 +35,13 @@ Browser Demo Version:
 - Reset demo data.
 - Load demo scenarios.
 - Review the default workspace workflow: `All Files -> Extension Filter -> Keyword Search -> Add Tag Preview -> Result Table`.
+- Add nodes from the Node Library.
+- Duplicate, delete, resize, and inspect selected nodes.
+- Mark a node as a connection source, connect it to another selected node, and delete selected connections.
+- Create and clear visual workflow groups.
 - Drag nodes, middle-drag to pan, and use the mouse wheel to zoom the canvas.
 - Select nodes and inspect node-specific purpose, parameters, and current output.
+- Switch workspace panels through Results, Relationships, and Import / Jobs tabs.
 - Browse built-in files.
 - Search filename, path, metadata, and preview text.
 - Filter by extension.

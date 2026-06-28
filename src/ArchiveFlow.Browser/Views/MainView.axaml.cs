@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia;
 using ArchiveFlow.Browser.ViewModels;
+using Avalonia.Interactivity;
 
 namespace ArchiveFlow.Browser.Views;
 
@@ -29,6 +30,13 @@ public partial class MainView : UserControl
         }
 
         var point = e.GetCurrentPoint(WorkspaceSurfaceControl);
+        if (point.Properties.IsRightButtonPressed)
+        {
+            ViewModel?.SelectWorkflowNode(node);
+            e.Handled = true;
+            return;
+        }
+
         if (!point.Properties.IsLeftButtonPressed)
         {
             return;
@@ -39,6 +47,28 @@ public partial class MainView : UserControl
         var canvasPosition = e.GetPosition(WorkspaceSurfaceControl);
         _dragOffset = new Point(canvasPosition.X - node.X, canvasPosition.Y - node.Y);
         e.Pointer.Capture(WorkspaceSurfaceControl);
+        e.Handled = true;
+    }
+
+    private void WorkflowEdge_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control control || control.DataContext is not BrowserWorkflowEdge edge)
+        {
+            return;
+        }
+
+        ViewModel?.SelectWorkflowEdge(edge);
+        e.Handled = true;
+    }
+
+    private void AddNodeButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: BrowserNodeLibraryItem item })
+        {
+            return;
+        }
+
+        ViewModel?.AddNodeCommand.Execute(item);
         e.Handled = true;
     }
 

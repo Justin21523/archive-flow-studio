@@ -73,7 +73,7 @@
                                 Spacing="4">
                         <TextBlock Text="Node Library"
                                    Classes="section-title"/>
-                        <TextBlock Text="Browser-safe demo nodes"
+                        <TextBlock Text="Click to add nodes. Select a node to connect, group, resize, duplicate, or delete."
                                    Classes="muted"/>
                     </StackPanel>
 
@@ -89,16 +89,33 @@
                                                    FontWeight="SemiBold"/>
                                         <ItemsControl ItemsSource="{Binding Nodes}">
                                             <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Border Background="#1E1E1E"
+                                                <DataTemplate DataType="vm:BrowserNodeLibraryItem">
+                                                    <Button Tag="{Binding}"
+                                                            Click="AddNodeButton_Click"
+                                                            HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Stretch"
+                                                            Background="#1E1E1E"
                                                             BorderBrush="#343434"
                                                             BorderThickness="1"
                                                             CornerRadius="6"
-                                                            Padding="10,7"
+                                                            Padding="9,7"
                                                             Margin="0,0,0,6">
-                                                        <TextBlock Text="{Binding}"
-                                                                   Foreground="#EDEDED"/>
-                                                    </Border>
+                                                        <Grid ColumnDefinitions="8,*"
+                                                              ColumnSpacing="8">
+                                                            <Border Width="8"
+                                                                    Height="28"
+                                                                    CornerRadius="3"
+                                                                    Background="{Binding Color}"/>
+                                                            <StackPanel Grid.Column="1"
+                                                                        Spacing="2">
+                                                                <TextBlock Text="{Binding Title}"
+                                                                           Foreground="#F4F4F4"
+                                                                           FontWeight="SemiBold"/>
+                                                                <TextBlock Text="{Binding Kind}"
+                                                                           Classes="muted"/>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Button>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
@@ -114,7 +131,9 @@
                   RowDefinitions="Auto,*"
                   RowSpacing="10">
                 <Border Classes="panel">
-                    <Grid ColumnDefinitions="*,150,Auto"
+                    <Grid RowDefinitions="Auto,Auto"
+                          ColumnDefinitions="*,150"
+                          RowSpacing="8"
                           ColumnSpacing="10">
                         <TextBox PlaceholderText="Search filename, path, metadata, or preview text"
                                  Text="{Binding SearchText, Mode=TwoWay}"
@@ -122,14 +141,33 @@
                         <ComboBox Grid.Column="1"
                                   ItemsSource="{Binding ExtensionFilters}"
                                   SelectedItem="{Binding SelectedExtensionFilter}"/>
-                        <StackPanel Grid.Column="2"
-                                    Orientation="Horizontal"
-                                    Spacing="8">
-                            <Button Content="Run Workflow"
+                        <WrapPanel Grid.Row="1"
+                                   Grid.ColumnSpan="2">
+                            <Button Content="Run"
                                     Command="{Binding ExecuteWorkflowCommand}"/>
+                            <Button Content="Add Link Source"
+                                    Command="{Binding MarkConnectionSourceCommand}"/>
+                            <Button Content="Connect"
+                                    Command="{Binding ConnectToSelectedNodeCommand}"/>
+                            <Button Content="Delete Link"
+                                    Command="{Binding DeleteSelectedConnectionCommand}"/>
+                            <Button Content="Duplicate"
+                                    Command="{Binding DuplicateSelectedNodeCommand}"/>
+                            <Button Content="Delete Node"
+                                    Command="{Binding DeleteSelectedNodeCommand}"/>
+                            <Button Content="Group"
+                                    Command="{Binding CreateGroupFromSelectedNodeCommand}"/>
+                            <Button Content="Clear Groups"
+                                    Command="{Binding ClearGroupsCommand}"/>
+                            <Button Content="Bigger"
+                                    Command="{Binding GrowSelectedNodeCommand}"/>
+                            <Button Content="Smaller"
+                                    Command="{Binding ShrinkSelectedNodeCommand}"/>
+                            <Button Content="Reset Flow"
+                                    Command="{Binding ResetWorkflowCommand}"/>
                             <Button Content="Reset View"
                                     Command="{Binding ResetCanvasViewCommand}"/>
-                        </StackPanel>
+                        </WrapPanel>
                     </Grid>
                 </Border>
 
@@ -169,7 +207,42 @@
                                     <Path Data="{Binding PathData}"
                                           Stroke="#74B6D8"
                                           StrokeThickness="3"
-                                          Fill="Transparent"/>
+                                          Fill="Transparent"
+                                          PointerPressed="WorkflowEdge_PointerPressed"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <ItemsControl ItemsSource="{Binding WorkflowGroups}"
+                                      Width="1500"
+                                      Height="900"
+                                      HorizontalAlignment="Left"
+                                      VerticalAlignment="Top">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <Canvas Width="1500" Height="900"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.Styles>
+                                <Style Selector="ContentPresenter">
+                                    <Setter Property="Canvas.Left" Value="{Binding X}"/>
+                                    <Setter Property="Canvas.Top" Value="{Binding Y}"/>
+                                </Style>
+                            </ItemsControl.Styles>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="vm:BrowserWorkflowGroup">
+                                    <Border Width="{Binding Width}"
+                                            Height="{Binding Height}"
+                                            Background="#223B4A5E"
+                                            BorderBrush="#7FC4E4"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            IsHitTestVisible="False">
+                                        <TextBlock Text="{Binding Name}"
+                                                   Foreground="#CFEFFF"
+                                                   FontWeight="SemiBold"
+                                                   Margin="12,8"/>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -195,7 +268,7 @@
                                 <DataTemplate DataType="vm:BrowserWorkflowNode">
                                     <Border Width="{Binding Width}"
                                             Height="{Binding Height}"
-                                            Background="#3E6B8C"
+                                            Background="{Binding Color}"
                                             BorderBrush="#DDEEFF"
                                             BorderThickness="1"
                                             CornerRadius="7"
@@ -279,6 +352,9 @@
                             <TextBlock Text="{Binding WorkflowSummary}"
                                        Foreground="#EDEDED"
                                        TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding ConnectionStatus}"
+                                       Foreground="#D6C48B"
+                                       TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding StatusMessage}"
                                        Foreground="#8BC34A"
                                        TextWrapping="Wrap"/>
@@ -334,101 +410,229 @@
             </ScrollViewer>
         </Grid>
 
-        <Grid Grid.Row="2"
-              ColumnDefinitions="2*,1.1*,1.2*"
-              ColumnSpacing="12"
-              Margin="14,0,14,14">
-            <Border Classes="panel"
-                    Padding="0">
-                <Grid RowDefinitions="Auto,*">
-                    <Grid Margin="12"
-                          ColumnDefinitions="*,Auto"
-                          ColumnSpacing="10">
-                        <TextBlock Text="{Binding FilteredCount, StringFormat='Result Table ({0} files)'}"
-                                   Classes="section-title"/>
+        <Border Grid.Row="2"
+                Classes="panel"
+                Margin="14,0,14,14"
+                Padding="0">
+            <TabControl>
+                <TabItem Header="Results">
+                    <Grid ColumnDefinitions="2*,1.1*,1.2*"
+                          ColumnSpacing="12"
+                          Margin="12">
+                        <Grid RowDefinitions="Auto,*">
+                            <Grid ColumnDefinitions="*,Auto"
+                                  ColumnSpacing="10">
+                                <TextBlock Text="{Binding FilteredCount, StringFormat='Result Table ({0} files)'}"
+                                           Classes="section-title"/>
+                                <StackPanel Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            Spacing="8">
+                                    <ComboBox ItemsSource="{Binding ExportFormats}"
+                                              SelectedItem="{Binding SelectedExportFormat}"
+                                              Width="145"/>
+                                    <Button Content="Export"
+                                            Command="{Binding ExportFilteredCommand}"/>
+                                </StackPanel>
+                            </Grid>
+                            <ListBox Grid.Row="1"
+                                     ItemsSource="{Binding FilteredFiles}"
+                                     SelectedItem="{Binding SelectedFile}"
+                                     Background="Transparent"
+                                     BorderThickness="0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate DataType="vm:BrowserFileRow">
+                                        <Grid ColumnDefinitions="2*,90,110"
+                                              ColumnSpacing="10"
+                                              Margin="0,5">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding FileName}"
+                                                           Foreground="White"
+                                                           FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding Path}"
+                                                           Classes="muted"
+                                                           TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Extension}"
+                                                       Foreground="#9BC7FF"/>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding Size}"
+                                                       Foreground="#CFCFCF"
+                                                       HorizontalAlignment="Right"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+
                         <StackPanel Grid.Column="1"
-                                    Orientation="Horizontal"
                                     Spacing="8">
-                            <ComboBox ItemsSource="{Binding ExportFormats}"
-                                      SelectedItem="{Binding SelectedExportFormat}"
-                                      Width="145"/>
-                            <Button Content="Export"
-                                    Command="{Binding ExportFilteredCommand}"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Text="{Binding PendingChanges.Count, StringFormat='Pending Changes ({0})'}"
+                                           Classes="section-title"/>
+                                <Button Grid.Column="1"
+                                        Content="Apply"
+                                        Command="{Binding ApplyPendingChangesCommand}"/>
+                            </Grid>
+                            <ScrollViewer>
+                                <ItemsControl ItemsSource="{Binding PendingChanges}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="vm:BrowserPendingChange">
+                                            <Grid ColumnDefinitions="*,90"
+                                                  Margin="0,4,0,0">
+                                                <TextBlock Text="{Binding FileName}"
+                                                           Foreground="White"
+                                                           TextWrapping="Wrap"/>
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Value}"
+                                                           Foreground="#D6C48B"
+                                                           HorizontalAlignment="Right"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2"
+                                    Spacing="8">
+                            <TextBlock Text="Export Preview"
+                                       Classes="section-title"/>
+                            <TextBox Text="{Binding ExportPreview}"
+                                     AcceptsReturn="True"
+                                     IsReadOnly="True"
+                                     MinHeight="120"
+                                     TextWrapping="Wrap"/>
                         </StackPanel>
                     </Grid>
-                    <ListBox Grid.Row="1"
-                             ItemsSource="{Binding FilteredFiles}"
-                             SelectedItem="{Binding SelectedFile}"
-                             Background="Transparent"
-                             BorderThickness="0">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate DataType="vm:BrowserFileRow">
-                                <Grid ColumnDefinitions="2*,90,110"
-                                      ColumnSpacing="10"
-                                      Margin="12,5">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding FileName}"
-                                                   Foreground="White"
-                                                   FontWeight="SemiBold"/>
-                                        <TextBlock Text="{Binding Path}"
-                                                   Classes="muted"
-                                                   TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding Extension}"
-                                               Foreground="#9BC7FF"/>
-                                    <TextBlock Grid.Column="2"
-                                               Text="{Binding Size}"
-                                               Foreground="#CFCFCF"
-                                               HorizontalAlignment="Right"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </Grid>
-            </Border>
+                </TabItem>
 
-            <Border Grid.Column="1"
-                    Classes="panel">
-                <StackPanel Spacing="8">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Text="{Binding PendingChanges.Count, StringFormat='Pending Changes ({0})'}"
-                                   Classes="section-title"/>
-                        <Button Grid.Column="1"
-                                Content="Apply"
-                                Command="{Binding ApplyPendingChangesCommand}"/>
+                <TabItem Header="Relationships">
+                    <Grid ColumnDefinitions="340,*"
+                          ColumnSpacing="16"
+                          Margin="12">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Create Relationship"
+                                       Classes="section-title"/>
+                            <ComboBox ItemsSource="{Binding FilteredFiles}"
+                                      SelectedItem="{Binding SourceFile}"/>
+                            <ComboBox ItemsSource="{Binding FilteredFiles}"
+                                      SelectedItem="{Binding TargetFile}"/>
+                            <ComboBox ItemsSource="{Binding RelationshipTypes}"
+                                      SelectedItem="{Binding SelectedRelationshipType}"/>
+                            <Button Content="Create Relationship"
+                                    Command="{Binding CreateRelationshipCommand}"/>
+                        </StackPanel>
+
+                        <ListBox Grid.Column="1"
+                                 ItemsSource="{Binding Relationships}"
+                                 Background="Transparent"
+                                 BorderThickness="0">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="2*,130,2*,140"
+                                          ColumnSpacing="10"
+                                          Margin="0,5">
+                                        <TextBlock Text="{Binding SourceFileName}"
+                                                   Foreground="White"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding RelationshipType}"
+                                                   Foreground="#D6C48B"/>
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding TargetFileName}"
+                                                   Foreground="White"/>
+                                        <TextBlock Grid.Column="3"
+                                                   Text="{Binding CreatedAt}"
+                                                   Classes="muted"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
                     </Grid>
-                    <ItemsControl ItemsSource="{Binding PendingChanges}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="vm:BrowserPendingChange">
-                                <Grid ColumnDefinitions="*,90"
-                                      Margin="0,4,0,0">
-                                    <TextBlock Text="{Binding FileName}"
-                                               Foreground="White"
-                                               TextWrapping="Wrap"/>
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding Value}"
-                                               Foreground="#D6C48B"
-                                               HorizontalAlignment="Right"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
+                </TabItem>
 
-            <Border Grid.Column="2"
-                    Classes="panel">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="Export Preview"
-                               Classes="section-title"/>
-                    <TextBox Text="{Binding ExportPreview}"
-                             AcceptsReturn="True"
-                             IsReadOnly="True"
-                             MinHeight="120"
-                             TextWrapping="Wrap"/>
-                </StackPanel>
-            </Border>
-        </Grid>
+                <TabItem Header="Import / Jobs">
+                    <Grid ColumnDefinitions="1.2*,1*,1*"
+                          ColumnSpacing="16"
+                          Margin="12">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Mock Import Preview"
+                                       Classes="section-title"/>
+                            <TextBlock Text="{Binding ImportSummary}"
+                                       Classes="muted"
+                                       TextWrapping="Wrap"/>
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="8">
+                                <Button Content="Preview Import"
+                                        Command="{Binding PreviewImportCommand}"/>
+                                <Button Content="Confirm Import"
+                                        Command="{Binding ConfirmImportCommand}"/>
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding ImportPreviewItems}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid ColumnDefinitions="*,90"
+                                              Margin="0,4,0,0">
+                                            <TextBlock Text="{Binding FileName}"
+                                                       Foreground="White"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Status}"
+                                                       Foreground="#9BC7FF"
+                                                       HorizontalAlignment="Right"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1"
+                                    Spacing="8">
+                            <TextBlock Text="Export Jobs"
+                                       Classes="section-title"/>
+                            <ItemsControl ItemsSource="{Binding ExportJobs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid ColumnDefinitions="90,70,*"
+                                              Margin="0,4,0,0">
+                                            <TextBlock Text="{Binding Format}"
+                                                       Foreground="#9BC7FF"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding FileCount}"
+                                                       Foreground="White"/>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding Status}"
+                                                       Foreground="#8BC34A"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2"
+                                    Spacing="8">
+                            <TextBlock Text="Import Jobs"
+                                       Classes="section-title"/>
+                            <ItemsControl ItemsSource="{Binding ImportJobs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid ColumnDefinitions="80,80,*"
+                                              Margin="0,4,0,0">
+                                            <TextBlock Text="{Binding ImportedCount}"
+                                                       Foreground="#9BC7FF"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding ErrorCount}"
+                                                       Foreground="#D6C48B"/>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding Status}"
+                                                       Foreground="#8BC34A"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
+                </TabItem>
+            </TabControl>
+        </Border>
     </Grid>
 </UserControl>
