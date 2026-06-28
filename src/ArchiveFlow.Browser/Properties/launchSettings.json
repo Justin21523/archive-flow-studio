@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "ArchiveFlow.Browser": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_URLS": "http://localhost:5000"
+      }
+    }
+  }
+}

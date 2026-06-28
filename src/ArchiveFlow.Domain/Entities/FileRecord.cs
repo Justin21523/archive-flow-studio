@@ -53,6 +53,34 @@ public class FileRecord
         };
     }
 
+    public static FileRecord CreateVirtual(
+        string filePath,
+        string fileHash,
+        long fileSize,
+        string mimeType,
+        DateTime? importedAt = null)
+    {
+        var now = importedAt ?? DateTime.UtcNow;
+
+        // Browser demo 沒有任意本機檔案存取權，因此由呼叫端提供檔案屬性。
+        return new FileRecord
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            ArchiveId = GenerateArchiveId(),
+            FilePath = filePath,
+            FileName = Path.GetFileName(filePath),
+            FileExtension = Path.GetExtension(filePath).ToLowerInvariant(),
+            FileHash = fileHash,
+            FileSize = fileSize,
+            MimeType = mimeType,
+            Status = (int)FileStatus.Scanned,
+            CreatedAt = now,
+            ImportedAt = now,
+            ModifiedAt = now,
+            LastScannedAt = now
+        };
+    }
+
     public void UpdateStatus(FileStatus newStatus)
     {
         Status = (int)newStatus;
@@ -81,6 +109,28 @@ public class FileRecord
     public void UpdateContentPreview(string contentPreview)
     {
         ContentPreview = contentPreview;
+    }
+
+    public void UpdateHash(string fileHash)
+    {
+        if (string.IsNullOrWhiteSpace(fileHash))
+        {
+            throw new ArgumentException("File hash cannot be empty.", nameof(fileHash));
+        }
+
+        FileHash = fileHash.Trim();
+        ModifiedAt = DateTime.UtcNow;
+    }
+
+    public void UpdateArchiveId(string archiveId)
+    {
+        if (string.IsNullOrWhiteSpace(archiveId))
+        {
+            throw new ArgumentException("Archive ID cannot be empty.", nameof(archiveId));
+        }
+
+        ArchiveId = archiveId.Trim();
+        ModifiedAt = DateTime.UtcNow;
     }
 
     public void UpdateThumbnailPath(string thumbnailPath)
