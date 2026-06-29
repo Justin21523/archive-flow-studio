@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using ArchiveFlow.Application.DTOs;
 using ArchiveFlow.Application.Interfaces;
+using ArchiveFlow.Application.Nodes.Definitions;
 using ArchiveFlow.Browser.Services;
 using ArchiveFlow.Domain.Entities;
 using ArchiveFlow.Domain.Enums;
@@ -50,7 +51,13 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         ".csv",
         ".png",
         ".glb",
-        ".docx"
+        ".docx",
+        ".txt",
+        ".bib",
+        ".jpg",
+        ".mp4",
+        ".mp3",
+        ".zip"
     ];
 
     public IReadOnlyList<string> ExportFormats { get; } =
@@ -143,7 +150,7 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
     private string _selectedNodeOutput = "No node selected.";
 
     [ObservableProperty]
-    private string _connectionStatus = "Select a node, mark it as the link source, then select another node and connect.";
+    private string _connectionStatus = "Click a node output dot, then click a target input dot to connect.";
 
     public string DemoNotice =>
         "Browser Workspace Demo: local folder scanning, native SQLite storage, and direct file-system export are simulated for online review.";
@@ -326,8 +333,9 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         var outputs = new Dictionary<BrowserWorkflowNode, List<BrowserFileRow>>();
         foreach (var node in orderedNodes)
         {
-            var input = GetInputForNode(node, outputs);
-            var result = await ExecuteWorkflowNodeAsync(node, input);
+            var inputSets = GetInputSetsForNode(node, outputs);
+            var input = MergeInputSets(node, inputSets);
+            var result = await ExecuteWorkflowNodeAsync(node, input, inputSets);
             outputs[node] = result.Files;
             _lastNodeCounts[node.Id] = result.Files.Count;
             node.OutputLabel = result.OutputLabel;
@@ -364,16 +372,7 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         var anchor = SelectedWorkflowNode ?? WorkflowNodes.LastOrDefault();
         var x = anchor is null ? 80 : Math.Min(1320, anchor.X + 180);
         var y = anchor is null ? 120 : anchor.Y + (WorkflowNodes.Count % 2 == 0 ? 135 : 0);
-        var node = new BrowserWorkflowNode(
-            $"demo-node-{_nextNodeNumber++}",
-            item.Title,
-            item.Kind,
-            item.Description,
-            item.OutputLabel,
-            x,
-            Math.Min(760, y),
-            item.Color,
-            item.Parameters);
+        var node = item.CreateNode($"demo-node-{_nextNodeNumber++}", x, Math.Min(760, y));
 
         WorkflowNodes.Add(node);
         if (anchor is not null && !ReferenceEquals(anchor, node))
@@ -396,16 +395,11 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         }
 
         var source = SelectedWorkflowNode;
-        var copy = new BrowserWorkflowNode(
+        var copy = source.Clone(
             $"demo-node-{_nextNodeNumber++}",
             $"{source.Title} Copy",
-            source.Kind,
-            source.Description,
-            source.OutputLabel,
             Math.Min(1320, source.X + 45),
-            Math.Min(760, source.Y + 145),
-            source.Color,
-            source.Parameters.Select(parameter => new BrowserNodeParameter(parameter.Name, parameter.Value)).ToList());
+            Math.Min(760, source.Y + 145));
 
         WorkflowNodes.Add(copy);
         AddEdge(source, copy);
@@ -449,9 +443,7 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
             return;
         }
 
-        _pendingConnectionSource = SelectedWorkflowNode;
-        ConnectionStatus = $"Link source: {_pendingConnectionSource.Title}. Select a target node, then click Connect.";
-        StatusMessage = ConnectionStatus;
+        BeginPortConnection(SelectedWorkflowNode);
     }
 
     [RelayCommand]
@@ -464,25 +456,7 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
             return;
         }
 
-        if (ReferenceEquals(_pendingConnectionSource, SelectedWorkflowNode))
-        {
-            ConnectionStatus = "A node cannot connect to itself.";
-            StatusMessage = ConnectionStatus;
-            return;
-        }
-
-        if (AddEdge(_pendingConnectionSource, SelectedWorkflowNode))
-        {
-            ConnectionStatus = $"Connected {_pendingConnectionSource.Title} -> {SelectedWorkflowNode.Title}.";
-        }
-        else
-        {
-            ConnectionStatus = "That connection already exists.";
-        }
-
-        _pendingConnectionSource = null;
-        StatusMessage = ConnectionStatus;
-        UpdateWorkflowCounts();
+        CompletePortConnection(SelectedWorkflowNode);
     }
 
     [RelayCommand]
@@ -571,7 +545,9 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
                 var record = await _repository.Files.GetByIdAsync(change.FileId);
                 if (record is not null)
                 {
-                    record.UpdateStatus(FileStatus.Archived);
+                    record.UpdateStatus(Enum.TryParse<FileStatus>(change.Value, ignoreCase: true, out var status)
+                        ? status
+                        : FileStatus.Archived);
                     await _repository.Files.SaveAsync(record);
                     await _repository.Metadata.SetMetadataValueAsync(
                         change.FileId,
@@ -585,13 +561,37 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
                 continue;
             }
 
-            await _repository.Metadata.AddMetadataValueIfMissingAsync(
-                change.FileId,
-                "tag",
-                "Tag",
-                "String",
-                "Descriptive",
-                change.Value);
+            switch (change.Action)
+            {
+                case "Remove tag":
+                    await _repository.Metadata.DeleteMetadataValueAsync(change.FileId, "tag", change.Value);
+                    break;
+                case "Set subject":
+                    await _repository.Metadata.SetMetadataValueAsync(change.FileId, "subject", "Subject", "String", "Descriptive", change.Value);
+                    break;
+                case "Set project":
+                    await _repository.Metadata.SetMetadataValueAsync(change.FileId, "project", "Project", "String", "Descriptive", change.Value);
+                    break;
+                case "Set reading status":
+                    await _repository.Metadata.SetMetadataValueAsync(change.FileId, "reading_status", "Reading Status", "String", "Personal", change.Value);
+                    break;
+                case "Set importance":
+                    await _repository.Metadata.SetMetadataValueAsync(change.FileId, "importance", "Importance", "String", "Personal", change.Value);
+                    break;
+                case "Generate archive id":
+                case "Validate metadata":
+                    await _repository.Metadata.SetMetadataValueAsync(change.FileId, "workflow_note", "Workflow Note", "String", "Technical", change.Value);
+                    break;
+                default:
+                    await _repository.Metadata.AddMetadataValueIfMissingAsync(
+                        change.FileId,
+                        "tag",
+                        "Tag",
+                        "String",
+                        "Descriptive",
+                        change.Value);
+                    break;
+            }
         }
 
         PendingChanges.Clear();
@@ -647,6 +647,59 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
     public void SelectWorkflowEdge(BrowserWorkflowEdge edge)
     {
         SelectedWorkflowEdge = edge;
+    }
+
+    public void BeginPortConnection(BrowserWorkflowNode source)
+    {
+        SelectWorkflowNode(source);
+        if (!source.CanStartOutput)
+        {
+            ConnectionStatus = $"{source.Title} has no output port.";
+            StatusMessage = ConnectionStatus;
+            return;
+        }
+
+        _pendingConnectionSource = source;
+        ConnectionStatus = $"Link source: {source.Title}. Click another node input dot to connect.";
+        StatusMessage = ConnectionStatus;
+    }
+
+    public void CompletePortConnection(BrowserWorkflowNode target)
+    {
+        if (_pendingConnectionSource is null)
+        {
+            ConnectionStatus = "Click an output dot first, then click a target input dot.";
+            StatusMessage = ConnectionStatus;
+            return;
+        }
+
+        if (!target.CanAcceptInput)
+        {
+            ConnectionStatus = $"{target.Title} has no input port.";
+            StatusMessage = ConnectionStatus;
+            return;
+        }
+
+        if (ReferenceEquals(_pendingConnectionSource, target))
+        {
+            ConnectionStatus = "A node cannot connect to itself.";
+            StatusMessage = ConnectionStatus;
+            return;
+        }
+
+        if (AddEdge(_pendingConnectionSource, target))
+        {
+            ConnectionStatus = $"Connected {_pendingConnectionSource.Title} -> {target.Title}.";
+            SelectWorkflowNode(target);
+        }
+        else
+        {
+            ConnectionStatus = "That connection already exists.";
+        }
+
+        _pendingConnectionSource = null;
+        StatusMessage = ConnectionStatus;
+        UpdateWorkflowCounts();
     }
 
     public void MoveWorkflowNode(BrowserWorkflowNode node, double x, double y)
@@ -774,13 +827,20 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         return ordered;
     }
 
-    private List<BrowserFileRow> GetInputForNode(BrowserWorkflowNode node, IReadOnlyDictionary<BrowserWorkflowNode, List<BrowserFileRow>> outputs)
+    private List<List<BrowserFileRow>> GetInputSetsForNode(BrowserWorkflowNode node, IReadOnlyDictionary<BrowserWorkflowNode, List<BrowserFileRow>> outputs)
     {
-        var upstreamRows = WorkflowEdges
+        return WorkflowEdges
             .Where(edge => ReferenceEquals(edge.Target, node))
-            .SelectMany(edge => outputs.TryGetValue(edge.Source, out var rows) ? rows : [])
-            .GroupBy(row => row.Id)
-            .Select(group => group.First())
+            .Select(edge => outputs.TryGetValue(edge.Source, out var rows) ? rows : [])
+            .Where(rows => rows.Count > 0)
+            .ToList();
+    }
+
+    private List<BrowserFileRow> MergeInputSets(BrowserWorkflowNode node, IReadOnlyList<List<BrowserFileRow>> inputSets)
+    {
+        var upstreamRows = inputSets
+            .SelectMany(rows => rows)
+            .DistinctBy(row => row.Id)
             .ToList();
 
         if (upstreamRows.Count > 0 || IsSourceNode(node))
@@ -795,19 +855,22 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
     private BrowserWorkflowNode? GetTerminalNode(IReadOnlyList<BrowserWorkflowNode> orderedNodes, IReadOnlyDictionary<BrowserWorkflowNode, List<BrowserFileRow>> outputs)
     {
         return orderedNodes.LastOrDefault(node => node.Title.Contains("Result", StringComparison.OrdinalIgnoreCase)) ??
-               orderedNodes.LastOrDefault(node => node.Kind == "Output") ??
+               orderedNodes.LastOrDefault(node => node.Kind == "Outputs") ??
                orderedNodes.LastOrDefault(node => !WorkflowEdges.Any(edge => ReferenceEquals(edge.Source, node)) && outputs.ContainsKey(node)) ??
                orderedNodes.LastOrDefault();
     }
 
-    private async Task<BrowserNodeExecutionResult> ExecuteWorkflowNodeAsync(BrowserWorkflowNode node, List<BrowserFileRow> input)
+    private async Task<BrowserNodeExecutionResult> ExecuteWorkflowNodeAsync(
+        BrowserWorkflowNode node,
+        List<BrowserFileRow> input,
+        IReadOnlyList<List<BrowserFileRow>> inputSets)
     {
         if (IsSourceNode(node))
         {
             return ExecuteSourceNode(node);
         }
 
-        if (node.Kind == "Filter")
+        if (node.Kind == "Query Filters")
         {
             return ExecuteFilterNode(node, input);
         }
@@ -817,17 +880,27 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
             return ExecuteSearchNode(node, input);
         }
 
-        if (node.Kind == "Metadata Action")
+        if (node.Kind == "Logic & Set Operations")
+        {
+            return ExecuteLogicNode(node, input, inputSets);
+        }
+
+        if (node.Kind == "Metadata Actions")
         {
             return ExecuteMetadataActionNode(node, input);
         }
 
-        if (node.Kind == "Relationship")
+        if (node.Kind == "Relationships")
         {
             return await ExecuteRelationshipNodeAsync(node, input);
         }
 
-        if (node.Kind == "Output")
+        if (node.Kind == "Indexing & Extraction" || node.Kind == "File Actions" || node.Kind == "Create / Template")
+        {
+            return ExecuteBrowserSafeActionNode(node, input);
+        }
+
+        if (node.Kind == "Outputs")
         {
             return await ExecuteOutputNodeAsync(node, input);
         }
@@ -837,15 +910,27 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
 
     private BrowserNodeExecutionResult ExecuteSourceNode(BrowserWorkflowNode node)
     {
-        var output = node.Title switch
+        var output = node.NodeType switch
         {
-            "Recent Imports" => Files
+            "source.recent_imports" => Files
                 .OrderByDescending(row => row.Record.ImportedAt)
-                .Take(Math.Min(3, Files.Count))
+                .Take(Math.Min(20, Files.Count))
                 .ToList(),
-            "Missing Metadata" => Files
+            "source.selected_files" => SelectedFile is null ? Files.Take(10).ToList() : [SelectedFile],
+            "source.unorganized_files" => Files
+                .Where(row => IsMissingDescriptiveMetadata(row) ||
+                              row.MetadataValues.All(value => value.FieldName != "project") ||
+                              row.MetadataValues.All(value => value.FieldName != "tag"))
+                .ToList(),
+            "source.missing_metadata" => Files
                 .Where(IsMissingDescriptiveMetadata)
                 .ToList(),
+            "source.duplicate_files" => Files
+                .GroupBy(row => row.Record.FileHash, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1)
+                .SelectMany(group => group)
+                .ToList(),
+            "source.folder_source" => FilterByText(Files, GetParameter(node, "folderPath"), row => row.Path).ToList(),
             _ => Files.ToList()
         };
 
@@ -854,39 +939,40 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
 
     private BrowserNodeExecutionResult ExecuteFilterNode(BrowserWorkflowNode node, List<BrowserFileRow> input)
     {
-        var output = node.Title switch
+        var output = node.NodeType switch
         {
-            "Extension Filter" => SelectedExtensionFilter == "All"
-                ? input
-                : input.Where(row => string.Equals(row.Extension, SelectedExtensionFilter, StringComparison.OrdinalIgnoreCase)).ToList(),
-            "Metadata Field" => input
-                .Where(row => MatchesMetadataRule(row, SearchText))
+            "filter.file_type" => input.Where(row => MatchesFileType(row, GetParameter(node, "fileType", "Document"))).ToList(),
+            "filter.extension" => FilterByExtension(input, GetParameter(node, "extension", ".pdf")).ToList(),
+            "filter.date_range" => input.Where(row => MatchesDateRange(row, GetParameter(node, "startDate"), GetParameter(node, "endDate"))).ToList(),
+            "filter.size" => input.Where(row => MatchesSizeRange(row, GetParameter(node, "minSizeMb", "0"), GetParameter(node, "maxSizeMb", "100"))).ToList(),
+            "filter.path_contains" => FilterByText(input, GetParameter(node, "pathText"), row => row.Path).ToList(),
+            "filter.tag" => input.Where(row => HasMetadata(row, "tag", GetParameter(node, "tag"))).ToList(),
+            "filter.subject" => input.Where(row => HasMetadata(row, "subject", GetParameter(node, "subject"))).ToList(),
+            "filter.metadata_field" => input
+                .Where(row => MatchesMetadataRule(
+                    row,
+                    GetParameter(node, "fieldName", "subject"),
+                    GetParameter(node, "operator", "contains"),
+                    GetParameter(node, "value")))
                 .ToList(),
-            "Status Filter" => input
-                .Where(row => row.MetadataSummary.Contains("Status:", StringComparison.OrdinalIgnoreCase) ||
-                              row.Record.GetStatus() is FileStatus.Scanned or FileStatus.Archived)
-                .ToList(),
-            _ => input
+            "filter.status" => input.Where(row => MatchesStatus(row, GetParameter(node, "status", "Scanned"))).ToList(),
+            _ => input.ToList()
         };
 
-        var detail = node.Title == "Extension Filter" && SelectedExtensionFilter != "All"
-            ? $" matching {SelectedExtensionFilter}"
-            : string.Empty;
-        return new BrowserNodeExecutionResult(output, $"{output.Count} of {input.Count} files passed {node.Title}{detail}.");
+        return new BrowserNodeExecutionResult(output, $"{output.Count} of {input.Count} files passed {node.Title}.");
     }
 
     private BrowserNodeExecutionResult ExecuteSearchNode(BrowserWorkflowNode node, List<BrowserFileRow> input)
     {
-        var query = SearchText.Trim();
-        var output = node.Title switch
+        var query = GetSearchQuery(node);
+        var output = node.NodeType switch
         {
-            "Full Text Search" => string.IsNullOrWhiteSpace(query)
-                ? input.Where(row => row.Preview.Contains("full-text", StringComparison.OrdinalIgnoreCase) ||
-                                     row.Preview.Contains("workflow", StringComparison.OrdinalIgnoreCase)).ToList()
-                : input.Where(row => row.Preview.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList(),
-            "Boolean Search" => ExecuteBooleanSearch(input, string.IsNullOrWhiteSpace(query) ? "metadata AND archive" : query),
+            "search.full_text" => ExecuteFullTextSearch(input, query, GetParameter(node, "mode", "All terms")),
+            "search.boolean" => ExecuteBooleanSearch(input, string.IsNullOrWhiteSpace(query) ? "AI AND metadata" : query),
+            "search.filename" => FilterByText(input, query, row => row.FileName).ToList(),
+            "search.content" => FilterByText(input, query, row => row.Preview).ToList(),
             _ => string.IsNullOrWhiteSpace(query)
-                ? input
+                ? input.ToList()
                 : input.Where(row => BuildSearchText(row).Contains(query, StringComparison.OrdinalIgnoreCase)).ToList()
         };
 
@@ -896,12 +982,42 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         return new BrowserNodeExecutionResult(output, $"{output.Count} of {input.Count} files matched {node.Title} using {labelQuery}.");
     }
 
+    private BrowserNodeExecutionResult ExecuteLogicNode(
+        BrowserWorkflowNode node,
+        List<BrowserFileRow> input,
+        IReadOnlyList<List<BrowserFileRow>> inputSets)
+    {
+        var output = node.NodeType switch
+        {
+            "logic.and" or "logic.intersection" => IntersectInputs(inputSets),
+            "logic.or" or "logic.union" => inputSets.SelectMany(rows => rows).DistinctBy(row => row.Id).ToList(),
+            "logic.difference" => DifferenceInputs(inputSets),
+            "logic.not" => Files.Where(row => input.All(inputRow => inputRow.Id != row.Id)).ToList(),
+            "logic.sort_by" => SortRows(input, GetParameter(node, "field", "Imported Date"), GetParameter(node, "direction", "Descending")).ToList(),
+            "logic.limit" => input.Take(ParseInt(GetParameter(node, "count", "100"), 100)).ToList(),
+            _ => input.ToList()
+        };
+
+        var groupText = node.NodeType == "logic.group_by"
+            ? $" Grouped by {GetParameter(node, "field", "Extension")} in the demo summary."
+            : string.Empty;
+        return new BrowserNodeExecutionResult(output, $"{output.Count} files produced by {node.Title}.{groupText}");
+    }
+
     private BrowserNodeExecutionResult ExecuteMetadataActionNode(BrowserWorkflowNode node, List<BrowserFileRow> input)
     {
-        var action = node.Title.Contains("Status", StringComparison.OrdinalIgnoreCase)
-            ? "Set status"
-            : "Add tag";
-        var value = action == "Set status" ? "Reviewed" : "browser-demo";
+        var (action, value) = node.NodeType switch
+        {
+            "metadata.remove_tag" => ("Remove tag", GetParameter(node, "tag")),
+            "metadata.set_subject" => ("Set subject", GetParameter(node, "subject", "Browser Demo")),
+            "metadata.set_project" => ("Set project", GetParameter(node, "project", "ArchiveFlow Demo")),
+            "metadata.set_status" => ("Set status", GetParameter(node, "status", "Archived")),
+            "metadata.set_reading_status" => ("Set reading status", GetParameter(node, "readingStatus", "To Read")),
+            "metadata.set_importance" => ("Set importance", GetParameter(node, "importance", "Normal")),
+            "metadata.generate_archive_id" => ("Generate archive id", GetParameter(node, "pattern", "AF-{yyyyMMdd}-{sequence}")),
+            "metadata.validate_metadata" => ("Validate metadata", "Completeness check"),
+            _ => ("Add tag", GetParameter(node, "tag", "AI"))
+        };
 
         foreach (var file in input)
         {
@@ -913,32 +1029,96 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
 
     private async Task<BrowserNodeExecutionResult> ExecuteRelationshipNodeAsync(BrowserWorkflowNode node, List<BrowserFileRow> input)
     {
+        if (node.NodeType is "relationship.find_related" or "relationship.find_notes")
+        {
+            var sourceIds = input.Select(row => row.Id).ToHashSet(StringComparer.Ordinal);
+            var relationships = await _repository.Relationships.GetAllRelationshipsAsync();
+            var relatedIds = relationships
+                .Where(item => sourceIds.Contains(item.SourceFileId) || sourceIds.Contains(item.TargetFileId))
+                .SelectMany(item => new[] { item.SourceFileId, item.TargetFileId })
+                .Where(id => !sourceIds.Contains(id))
+                .ToHashSet(StringComparer.Ordinal);
+            var related = Files.Where(row => relatedIds.Contains(row.Id)).ToList();
+            return new BrowserNodeExecutionResult(related, $"{related.Count} related files found from {input.Count} input files.");
+        }
+
+        if (node.NodeType is "relationship.same_project" or "relationship.same_subject")
+        {
+            var field = node.NodeType == "relationship.same_project" ? "project" : "subject";
+            var values = input
+                .SelectMany(row => row.MetadataValues)
+                .Where(value => string.Equals(value.FieldName, field, StringComparison.OrdinalIgnoreCase))
+                .Select(value => value.ValueText)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var matches = Files.Where(row => row.MetadataValues.Any(value =>
+                string.Equals(value.FieldName, field, StringComparison.OrdinalIgnoreCase) &&
+                values.Contains(value.ValueText))).ToList();
+            return new BrowserNodeExecutionResult(matches, $"{matches.Count} files share the same {field}.");
+        }
+
+        if (node.NodeType == "relationship.build_graph")
+        {
+            await RefreshRelationshipsAsync();
+            return new BrowserNodeExecutionResult(input, $"Graph view prepared with {Relationships.Count} relationship records.");
+        }
+
         var source = SourceFile ?? input.FirstOrDefault();
-        var target = TargetFile ?? input.Skip(1).FirstOrDefault() ?? Files.FirstOrDefault(row => source is null || row.Id != source.Id);
+        var targetArchiveId = GetParameter(node, "targetArchiveId");
+        var target = Files.FirstOrDefault(row => string.Equals(row.ArchiveId, targetArchiveId, StringComparison.OrdinalIgnoreCase)) ??
+                     TargetFile ??
+                     input.Skip(1).FirstOrDefault() ??
+                     Files.FirstOrDefault(row => source is null || row.Id != source.Id);
         if (source is null || target is null)
         {
             return new BrowserNodeExecutionResult(input, "Relationship node needs a source file and a target file.");
         }
 
-        var created = await _repository.Relationships.TryCreateRelationshipAsync(source.Id, target.Id, SelectedRelationshipType);
+        var relationshipType = node.NodeType switch
+        {
+            "relationship.link_note" => "hasNote",
+            "relationship.link_source" => "hasSource",
+            "relationship.link_export" => "hasExport",
+            _ => GetParameter(node, "relationshipType", SelectedRelationshipType)
+        };
+        var created = await _repository.Relationships.TryCreateRelationshipAsync(source.Id, target.Id, relationshipType);
         await RefreshRelationshipsAsync();
         var status = created ? "created" : "already existed or was invalid";
-        return new BrowserNodeExecutionResult(input, $"Relationship {status}: {source.FileName} -> {target.FileName} ({SelectedRelationshipType}).");
+        return new BrowserNodeExecutionResult(input, $"Relationship {status}: {source.FileName} -> {target.FileName} ({relationshipType}).");
+    }
+
+    private BrowserNodeExecutionResult ExecuteBrowserSafeActionNode(BrowserWorkflowNode node, List<BrowserFileRow> input)
+    {
+        var output = node.NodeType switch
+        {
+            "index.detect_duplicates" => input
+                .GroupBy(row => row.Record.FileHash, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1)
+                .SelectMany(group => group)
+                .ToList(),
+            _ => input.ToList()
+        };
+
+        var label = node.NodeType.StartsWith("file.", StringComparison.Ordinal) || node.NodeType.StartsWith("create.", StringComparison.Ordinal)
+            ? $"{node.Title} is simulated in Browser Demo because direct desktop file operations are unavailable."
+            : $"{node.Title} completed in Browser Demo using in-memory sample data.";
+        return new BrowserNodeExecutionResult(output, $"{output.Count} files. {label}");
     }
 
     private async Task<BrowserNodeExecutionResult> ExecuteOutputNodeAsync(BrowserWorkflowNode node, List<BrowserFileRow> input)
     {
-        if (node.Title.Contains("CSV", StringComparison.OrdinalIgnoreCase) ||
-            node.Title.Contains("Dublin", StringComparison.OrdinalIgnoreCase))
+        if (node.NodeType is "output.export_csv" or "output.export_json" or "output.export_dublin_core")
         {
-            var format = node.Title.Contains("Dublin", StringComparison.OrdinalIgnoreCase)
-                ? ExportFormat.DublinCoreXml
-                : ExportFormat.Csv;
+            var format = node.NodeType switch
+            {
+                "output.export_json" => ExportFormat.Json,
+                "output.export_dublin_core" => ExportFormat.DublinCoreXml,
+                _ => ExportFormat.Csv
+            };
             var result = await _exportService.ExportAsync(new ExportRequest
             {
                 Format = format,
                 Files = input.Select(row => row.Record).ToList(),
-                RequestedFileName = $"archiveflow-workflow-{DateTime.UtcNow:yyyyMMddHHmmss}"
+                RequestedFileName = GetParameter(node, "fileName", $"archiveflow-workflow-{DateTime.UtcNow:yyyyMMddHHmmss}")
             });
 
             ExportPreview = _dataStore.LastExportContent;
@@ -946,12 +1126,15 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
             return new BrowserNodeExecutionResult(input, $"{result.Format} export generated for {input.Count} files.");
         }
 
-        return new BrowserNodeExecutionResult(input, $"{input.Count} files displayed in the result table.");
+        var suffix = node.NodeType == "output.smart_collection"
+            ? $" Smart collection \"{GetParameter(node, "collectionName", "New Smart Collection")}\" simulated."
+            : string.Empty;
+        return new BrowserNodeExecutionResult(input, $"{input.Count} files displayed in {node.Title}.{suffix}");
     }
 
     private static bool IsSourceNode(BrowserWorkflowNode node)
     {
-        return node.Kind == "Source";
+        return node.Kind == "Sources";
     }
 
     private static bool IsMissingDescriptiveMetadata(BrowserFileRow row)
@@ -960,10 +1143,111 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
                !row.MetadataSummary.Contains("Subject:", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool MatchesMetadataRule(BrowserFileRow row, string query)
+    private static IEnumerable<BrowserFileRow> FilterByExtension(IEnumerable<BrowserFileRow> input, string extension)
     {
-        var rule = string.IsNullOrWhiteSpace(query) ? "metadata" : query.Trim();
-        return row.MetadataSummary.Contains(rule, StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(extension) || extension.Equals("All", StringComparison.OrdinalIgnoreCase))
+        {
+            return input;
+        }
+
+        var normalized = extension.Trim();
+        if (!normalized.StartsWith(".", StringComparison.Ordinal))
+        {
+            normalized = "." + normalized;
+        }
+
+        return input.Where(row => string.Equals(row.Extension, normalized, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IEnumerable<BrowserFileRow> FilterByText(IEnumerable<BrowserFileRow> input, string query, Func<BrowserFileRow, string> selector)
+    {
+        return string.IsNullOrWhiteSpace(query)
+            ? input
+            : input.Where(row => selector(row).Contains(query.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool MatchesFileType(BrowserFileRow row, string fileType)
+    {
+        return fileType switch
+        {
+            "Document" => row.Extension is ".pdf" or ".md" or ".docx" or ".txt" or ".bib",
+            "Image" => row.Extension is ".png" or ".jpg" or ".jpeg" or ".svg",
+            "Video" => row.Extension is ".mp4" or ".mov",
+            "Audio" => row.Extension is ".mp3" or ".wav",
+            "Code" => row.Extension is ".cs" or ".json" or ".xml" or ".yaml",
+            "3D Model" => row.Extension is ".glb" or ".gltf" or ".obj",
+            "Archive" => row.Extension is ".zip" or ".7z",
+            _ => true
+        };
+    }
+
+    private static bool MatchesDateRange(BrowserFileRow row, string startDate, string endDate)
+    {
+        var importedAt = row.Record.ImportedAt.Date;
+        if (DateTime.TryParse(startDate, out var start) && importedAt < start.Date)
+        {
+            return false;
+        }
+
+        return !DateTime.TryParse(endDate, out var end) || importedAt <= end.Date;
+    }
+
+    private static bool MatchesSizeRange(BrowserFileRow row, string minSizeMb, string maxSizeMb)
+    {
+        var minBytes = ParseDouble(minSizeMb, 0) * 1024 * 1024;
+        var maxBytes = ParseDouble(maxSizeMb, 100) * 1024 * 1024;
+        return row.Record.FileSize >= minBytes && row.Record.FileSize <= maxBytes;
+    }
+
+    private static bool MatchesStatus(BrowserFileRow row, string status)
+    {
+        return string.IsNullOrWhiteSpace(status) ||
+               row.Record.GetStatus().ToString().Equals(status, StringComparison.OrdinalIgnoreCase) ||
+               HasMetadata(row, "status", status);
+    }
+
+    private static bool HasMetadata(BrowserFileRow row, string fieldName, string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ||
+               row.MetadataValues.Any(item =>
+                   string.Equals(item.FieldName, fieldName, StringComparison.OrdinalIgnoreCase) &&
+                   item.ValueText.Contains(value.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool MatchesMetadataRule(BrowserFileRow row, string fieldName, string operatorName, string value)
+    {
+        var values = row.MetadataValues
+            .Where(item => string.Equals(item.FieldName, fieldName, StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.ValueText)
+            .ToList();
+
+        return operatorName switch
+        {
+            "is empty" => values.Count == 0 || values.All(string.IsNullOrWhiteSpace),
+            "is not empty" => values.Any(item => !string.IsNullOrWhiteSpace(item)),
+            "equals" => values.Any(item => item.Equals(value, StringComparison.OrdinalIgnoreCase)),
+            "starts with" => values.Any(item => item.StartsWith(value, StringComparison.OrdinalIgnoreCase)),
+            "ends with" => values.Any(item => item.EndsWith(value, StringComparison.OrdinalIgnoreCase)),
+            _ => values.Any(item => string.IsNullOrWhiteSpace(value) || item.Contains(value, StringComparison.OrdinalIgnoreCase))
+        };
+    }
+
+    private static List<BrowserFileRow> ExecuteFullTextSearch(IEnumerable<BrowserFileRow> input, string query, string mode)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            query = "metadata archive";
+        }
+
+        if (mode == "Phrase")
+        {
+            return input.Where(row => row.Preview.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        var terms = query.Split(' ', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return mode == "Any term"
+            ? input.Where(row => terms.Any(term => row.Preview.Contains(term, StringComparison.OrdinalIgnoreCase))).ToList()
+            : input.Where(row => terms.All(term => row.Preview.Contains(term, StringComparison.OrdinalIgnoreCase))).ToList();
     }
 
     private static List<BrowserFileRow> ExecuteBooleanSearch(IEnumerable<BrowserFileRow> input, string query)
@@ -985,6 +1269,76 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
     private static string BuildSearchText(BrowserFileRow row)
     {
         return string.Join(' ', row.FileName, row.Path, row.Extension, row.Preview, row.MetadataSummary);
+    }
+
+    private static List<BrowserFileRow> IntersectInputs(IReadOnlyList<List<BrowserFileRow>> inputSets)
+    {
+        if (inputSets.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = inputSets.First().Select(row => row.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var rows in inputSets.Skip(1))
+        {
+            ids.IntersectWith(rows.Select(row => row.Id));
+        }
+
+        return inputSets.SelectMany(rows => rows).DistinctBy(row => row.Id).Where(row => ids.Contains(row.Id)).ToList();
+    }
+
+    private static List<BrowserFileRow> DifferenceInputs(IReadOnlyList<List<BrowserFileRow>> inputSets)
+    {
+        if (inputSets.Count == 0)
+        {
+            return [];
+        }
+
+        var excluded = inputSets.Skip(1).SelectMany(rows => rows).Select(row => row.Id).ToHashSet(StringComparer.Ordinal);
+        return inputSets.First().Where(row => !excluded.Contains(row.Id)).ToList();
+    }
+
+    private static IEnumerable<BrowserFileRow> SortRows(IEnumerable<BrowserFileRow> input, string field, string direction)
+    {
+        Func<BrowserFileRow, object> keySelector = field switch
+        {
+            "Modified Date" => row => row.Record.ModifiedAt ?? row.Record.ImportedAt,
+            "Filename" => row => row.FileName,
+            "Size" => row => row.Record.FileSize,
+            "Status" => row => row.Record.GetStatus().ToString(),
+            _ => row => row.Record.ImportedAt
+        };
+
+        return direction == "Ascending"
+            ? input.OrderBy(keySelector)
+            : input.OrderByDescending(keySelector);
+    }
+
+    private static int ParseInt(string value, int fallback)
+    {
+        return int.TryParse(value, out var parsed) ? Math.Max(0, parsed) : fallback;
+    }
+
+    private static double ParseDouble(string value, double fallback)
+    {
+        return double.TryParse(value, out var parsed) ? Math.Max(0, parsed) : fallback;
+    }
+
+    private static string GetParameter(BrowserWorkflowNode node, string key, string fallback = "")
+    {
+        return node.Parameters.FirstOrDefault(parameter => string.Equals(parameter.Key, key, StringComparison.OrdinalIgnoreCase))?.Value?.Trim() ?? fallback;
+    }
+
+    private static string GetSearchQuery(BrowserWorkflowNode node)
+    {
+        return node.NodeType switch
+        {
+            "search.boolean" => GetParameter(node, "expression", "AI AND metadata"),
+            "search.filename" => GetParameter(node, "filename"),
+            "search.content" => GetParameter(node, "contentQuery"),
+            "search.full_text" => GetParameter(node, "query"),
+            _ => GetParameter(node, "query")
+        };
     }
 
     private async Task RefreshRelationshipsAsync()
@@ -1019,91 +1373,28 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         _nextNodeNumber = 1;
         _nextGroupNumber = 1;
         _pendingConnectionSource = null;
-        ConnectionStatus = "Select a node, mark it as the link source, then select another node and connect.";
+        ConnectionStatus = "Click a node output dot, then click a target input dot to connect.";
         NodeLibraryGroups.Clear();
-        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Source",
-        [
-            CreateLibraryItem("Source", "All Files", "Loads every file from the browser demo repository.", "#3E6B8C", "Output: all demo files.", "Archive", "Browser demo sample data"),
-            CreateLibraryItem("Source", "Recent Imports", "Shows files from the latest mock import job.", "#3E6B8C", "Output: recent imported files.", "Window", "Latest mock import"),
-            CreateLibraryItem("Source", "Missing Metadata", "Finds files that still need descriptive metadata.", "#3E6B8C", "Output: files missing metadata.", "Completeness", "Required fields")
-        ]));
-        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Filter",
-        [
-            CreateLibraryItem("Filter", "Extension Filter", "Keeps files matching the selected extension filter.", "#6B7D3E", "Output: matching extension files.", "Extension", "Toolbar dropdown"),
-            CreateLibraryItem("Filter", "Metadata Field", "Keeps files matching a metadata field/value rule.", "#6B7D3E", "Output: metadata matches.", "Field", "Tag / Subject / Project"),
-            CreateLibraryItem("Filter", "Status Filter", "Keeps files matching an archive status.", "#6B7D3E", "Output: status matches.", "Status", "Imported / Reviewed")
-        ]));
-        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Search",
-        [
-            CreateLibraryItem("Search", "Keyword Search", "Searches filename, path, preview text, and metadata summary.", "#7A5C9E", "Output: keyword matches.", "Query", "Toolbar search field"),
-            CreateLibraryItem("Search", "Full Text Search", "Demonstrates browser-safe indexed content search over sample text.", "#7A5C9E", "Output: full-text matches.", "Index", "In-memory demo index"),
-            CreateLibraryItem("Search", "Boolean Search", "Demonstrates AND / OR keyword search behavior.", "#7A5C9E", "Output: boolean query matches.", "Query", "metadata AND archive")
-        ]));
-        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Actions",
-        [
-            CreateLibraryItem("Metadata Action", "Add Tag Preview", "Creates pending metadata changes before applying them.", "#A66A3D", "Output: pending metadata changes.", "Tag", "browser-demo"),
-            CreateLibraryItem("Relationship", "Create Relationship", "Creates source-to-target relationship records from selected files.", "#A66A3D", "Output: relationship preview.", "Type", "references"),
-            CreateLibraryItem("Metadata Action", "Set Status", "Previews a file status update for the result set.", "#A66A3D", "Output: pending status changes.", "Status", "Reviewed")
-        ]));
-        NodeLibraryGroups.Add(new BrowserNodeLibraryGroup("Output",
-        [
-            CreateLibraryItem("Output", "Result Table", "Displays the final file set below the canvas.", "#3F7A62", "Output: result table rows.", "View", "Result files"),
-            CreateLibraryItem("Output", "CSV Export", "Exports the current result as a browser download preview.", "#3F7A62", "Output: CSV export job.", "Format", "CSV"),
-            CreateLibraryItem("Output", "Dublin Core XML", "Exports the current result as a Dublin Core XML preview.", "#3F7A62", "Output: XML export job.", "Format", "Dublin Core XML")
-        ]));
+        var definitions = BuiltInNodeDefinitions.CreateAll();
+        foreach (var group in definitions.GroupBy(definition => definition.Subcategory))
+        {
+            NodeLibraryGroups.Add(new BrowserNodeLibraryGroup(
+                group.Key,
+                group.Select(CreateLibraryItem).ToList()));
+        }
 
         WorkflowNodes.Clear();
         WorkflowGroups.Clear();
-        WorkflowNodes.Add(new BrowserWorkflowNode(
-            "source-all",
-            "All Files",
-            "Source",
-            "Loads every sample archive file from the in-memory Browser Demo repository.",
-            "Output: all demo files.",
-            40,
-            110,
-            "#3E6B8C",
-            [new BrowserNodeParameter("Archive", "Browser demo sample data")]));
-        WorkflowNodes.Add(new BrowserWorkflowNode(
-            "filter-extension",
-            "Extension Filter",
-            "Filter",
-            "Keeps only files matching the selected extension filter. Choose All to pass every file.",
-            "Output updates when the extension filter changes.",
-            185,
-            110,
-            "#6B7D3E",
-            [new BrowserNodeParameter("Extension", "Bound to the toolbar extension dropdown")]));
-        WorkflowNodes.Add(new BrowserWorkflowNode(
-            "search-keyword",
-            "Keyword Search",
-            "Search",
-            "Searches filename, path, preview text, and metadata summary.",
-            "Output updates when the search box changes.",
-            330,
-            110,
-            "#7A5C9E",
-            [new BrowserNodeParameter("Query", "Bound to the toolbar search field")]));
-        WorkflowNodes.Add(new BrowserWorkflowNode(
-            "metadata-action",
-            "Add Tag Preview",
-            "Metadata Action",
-            "Creates pending metadata changes first; Apply writes them to the in-memory demo repository.",
-            "Preview-only until Apply Pending Changes is clicked.",
-            475,
-            110,
-            "#A66A3D",
-            [new BrowserNodeParameter("Tag", "browser-demo")]));
-        WorkflowNodes.Add(new BrowserWorkflowNode(
-            "output-result",
-            "Result Table",
-            "Output",
-            "Displays the final file set and can export the current result.",
-            "Result table receives the filtered file set.",
-            620,
-            110,
-            "#3F7A62",
-            [new BrowserNodeParameter("View", "Result files + export preview")]));
+
+        AddStarterNode(definitions, "source.all_files", "source-all", 40, 110);
+        AddStarterNode(definitions, "filter.extension", "filter-extension", 210, 110);
+        AddStarterNode(definitions, "search.keyword", "search-keyword", 380, 110);
+        AddStarterNode(definitions, "metadata.add_tag", "metadata-action", 550, 110);
+        AddStarterNode(definitions, "output.result_table", "output-result", 720, 110);
+
+        SetNodeParameter("filter-extension", "extension", ".pdf");
+        SetNodeParameter("search-keyword", "query", "");
+        SetNodeParameter("metadata-action", "tag", "browser-demo");
 
         WorkflowEdges.Clear();
         AddEdge(WorkflowNodes[0], WorkflowNodes[1]);
@@ -1115,26 +1406,34 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         RecalculateEdges();
     }
 
-    private BrowserNodeLibraryItem CreateLibraryItem(
-        string kind,
-        string title,
-        string description,
-        string color,
-        string outputLabel,
-        string parameterName,
-        string parameterValue)
+    private void AddStarterNode(IReadOnlyList<NodeDefinition> definitions, string nodeType, string id, double x, double y)
     {
-        return new BrowserNodeLibraryItem(
-            kind,
-            title,
-            description,
-            color,
-            outputLabel,
-            [new BrowserNodeParameter(parameterName, parameterValue)]);
+        var definition = definitions.First(item => item.NodeType == nodeType);
+        WorkflowNodes.Add(CreateLibraryItem(definition).CreateNode(id, x, y));
+    }
+
+    private static BrowserNodeLibraryItem CreateLibraryItem(NodeDefinition definition)
+    {
+        return BrowserNodeLibraryItem.FromDefinition(definition);
+    }
+
+    private void SetNodeParameter(string nodeId, string key, string value)
+    {
+        var node = WorkflowNodes.FirstOrDefault(item => item.Id == nodeId);
+        var parameter = node?.Parameters.FirstOrDefault(item => item.Key == key);
+        if (parameter is not null)
+        {
+            parameter.Value = value;
+        }
     }
 
     private bool AddEdge(BrowserWorkflowNode source, BrowserWorkflowNode target)
     {
+        if (!source.CanStartOutput || !target.CanAcceptInput || ReferenceEquals(source, target))
+        {
+            return false;
+        }
+
         if (WorkflowEdges.Any(edge => ReferenceEquals(edge.Source, source) && ReferenceEquals(edge.Target, target)))
         {
             return false;
@@ -1182,12 +1481,18 @@ public sealed partial class BrowserDemoViewModel : ObservableObject
         var allCount = Files.Count;
         var filteredCount = FilteredFiles.Count;
         SetOutput("source-all", $"{allCount} files loaded from browser demo data.");
-        SetOutput("filter-extension", SelectedExtensionFilter == "All"
+        var extension = WorkflowNodes.FirstOrDefault(item => item.Id == "filter-extension") is { } extensionNode
+            ? GetParameter(extensionNode, "extension", ".pdf")
+            : SelectedExtensionFilter;
+        SetOutput("filter-extension", extension == "All"
             ? $"{allCount} files pass because extension filter is All."
-            : $"{filteredCount} files match {SelectedExtensionFilter}.");
-        SetOutput("search-keyword", string.IsNullOrWhiteSpace(SearchText)
+            : $"{filteredCount} files match {extension}.");
+        var query = WorkflowNodes.FirstOrDefault(item => item.Id == "search-keyword") is { } searchNode
+            ? GetParameter(searchNode, "query")
+            : SearchText;
+        SetOutput("search-keyword", string.IsNullOrWhiteSpace(query)
             ? $"{filteredCount} files pass because no query is set."
-            : $"{filteredCount} files match \"{SearchText.Trim()}\".");
+            : $"{filteredCount} files match \"{query.Trim()}\".");
         SetOutput("metadata-action", PendingChanges.Count == 0
             ? "Run workflow to preview metadata tag changes."
             : $"{PendingChanges.Count} pending metadata tag changes.");
@@ -1213,14 +1518,22 @@ public sealed class BrowserNodeLibraryGroup(string name, IReadOnlyList<BrowserNo
 }
 
 public sealed class BrowserNodeLibraryItem(
+    string nodeType,
     string kind,
+    string icon,
     string title,
     string description,
     string color,
     string outputLabel,
+    bool canAcceptInput,
+    bool canStartOutput,
     IReadOnlyList<BrowserNodeParameter> parameters)
 {
+    public string NodeType { get; } = nodeType;
+
     public string Kind { get; } = kind;
+
+    public string Icon { get; } = icon;
 
     public string Title { get; } = title;
 
@@ -1231,43 +1544,117 @@ public sealed class BrowserNodeLibraryItem(
     public string OutputLabel { get; } = outputLabel;
 
     public IReadOnlyList<BrowserNodeParameter> Parameters { get; } = parameters;
+
+    public bool CanAcceptInput { get; } = canAcceptInput;
+
+    public bool CanStartOutput { get; } = canStartOutput;
+
+    public static BrowserNodeLibraryItem FromDefinition(NodeDefinition definition)
+    {
+        var parameters = definition.Parameters.Select(BrowserNodeParameter.FromDefinition).ToList();
+        return new BrowserNodeLibraryItem(
+            definition.NodeType,
+            definition.Subcategory,
+            definition.Icon,
+            definition.DisplayName,
+            definition.Description,
+            definition.AccentColor,
+            definition.IsActionNode
+                ? "Action runs in preview/apply mode."
+                : "Ready to execute in Browser Demo.",
+            definition.InputPorts.Count > 0,
+            definition.OutputPorts.Count > 0,
+            parameters);
+    }
+
+    public BrowserWorkflowNode CreateNode(string id, double x, double y)
+    {
+        return new BrowserWorkflowNode(
+            id,
+            NodeType,
+            Title,
+            Kind,
+            Icon,
+            Description,
+            OutputLabel,
+            x,
+            y,
+            Color,
+            CanAcceptInput,
+            CanStartOutput,
+            Parameters.Select(parameter => parameter.Clone()).ToList());
+    }
 }
 
 public sealed partial class BrowserWorkflowNode : ObservableObject
 {
     public BrowserWorkflowNode(
         string id,
+        string nodeType,
         string title,
         string kind,
+        string icon,
         string description,
         string outputLabel,
         double x,
         double y,
         string color,
+        bool canAcceptInput,
+        bool canStartOutput,
         IReadOnlyList<BrowserNodeParameter> parameters)
     {
         Id = id;
+        NodeType = nodeType;
         Title = title;
         Kind = kind;
+        Icon = icon;
         Description = description;
         OutputLabel = outputLabel;
         X = x;
         Y = y;
         Color = color;
-        Parameters = parameters;
+        CanAcceptInput = canAcceptInput;
+        CanStartOutput = canStartOutput;
+        Parameters = new ObservableCollection<BrowserNodeParameter>(parameters.Select(parameter => parameter.Clone()));
     }
 
     public string Id { get; }
+
+    public string NodeType { get; }
 
     public string Title { get; }
 
     public string Kind { get; }
 
+    public string Icon { get; }
+
     public string Description { get; }
 
     public string Color { get; }
 
-    public IReadOnlyList<BrowserNodeParameter> Parameters { get; }
+    public bool CanAcceptInput { get; }
+
+    public bool CanStartOutput { get; }
+
+    public ObservableCollection<BrowserNodeParameter> Parameters { get; }
+
+    public BrowserWorkflowNode Clone(string id, string title, double x, double y)
+    {
+        return new BrowserWorkflowNode(
+            id,
+            NodeType,
+            title,
+            Kind,
+            Icon,
+            Description,
+            OutputLabel,
+            x,
+            y,
+            Color,
+            CanAcceptInput,
+            CanStartOutput,
+            Parameters.Select(parameter => parameter.Clone()).ToList());
+    }
 
     [ObservableProperty]
     private double _width = 145;
@@ -1288,11 +1675,48 @@ public sealed partial class BrowserWorkflowNode : ObservableObject
     private string _outputLabel = string.Empty;
 }
 
-public sealed class BrowserNodeParameter(string name, string value)
+public sealed partial class BrowserNodeParameter(
+    string key,
+    string name,
+    NodeParameterControlType controlType,
+    string value,
+    IReadOnlyList<string> options) : ObservableObject
 {
+    public string Key { get; } = key;
+
     public string Name { get; } = name;
 
-    public string Value { get; } = value;
+    public NodeParameterControlType ControlType { get; } = controlType;
+
+    [ObservableProperty]
+    private string _value = value;
+
+    public IReadOnlyList<string> Options { get; } = options;
+
+    public bool IsText => ControlType == NodeParameterControlType.Text;
+
+    public bool IsNumber => ControlType == NodeParameterControlType.Number;
+
+    public bool IsDropdown => ControlType == NodeParameterControlType.Dropdown;
+
+    public bool IsDate => ControlType == NodeParameterControlType.Date;
+
+    public bool IsCheckbox => ControlType == NodeParameterControlType.Boolean;
+
+    public static BrowserNodeParameter FromDefinition(NodeParameterDefinition definition)
+    {
+        return new BrowserNodeParameter(
+            definition.Key,
+            definition.DisplayName,
+            definition.ControlType,
+            definition.DefaultValue,
+            definition.Options);
+    }
+
+    public BrowserNodeParameter Clone()
+    {
+        return new BrowserNodeParameter(Key, Name, ControlType, Value, Options.ToList());
+    }
 }
 
 public sealed partial class BrowserWorkflowEdge : ObservableObject
@@ -1412,6 +1836,7 @@ public sealed class BrowserFileRow
         Path = record.FilePath;
         Size = $"{Math.Max(1, record.FileSize / 1024):N0} KB";
         Preview = record.ContentPreview;
+        MetadataValues = metadata;
         MetadataSummary = metadata.Count == 0
             ? "No metadata"
             : string.Join(", ", metadata.Select(item => $"{item.DisplayName}: {item.ValueText}"));
@@ -1432,6 +1857,8 @@ public sealed class BrowserFileRow
     public string Size { get; }
 
     public string Preview { get; }
+
+    public IReadOnlyList<MetadataValue> MetadataValues { get; }
 
     public string MetadataSummary { get; }
 

@@ -266,34 +266,66 @@
                             </ItemsControl.Styles>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="vm:BrowserWorkflowNode">
-                                    <Border Width="{Binding Width}"
-                                            Height="{Binding Height}"
-                                            Background="{Binding Color}"
-                                            BorderBrush="#DDEEFF"
-                                            BorderThickness="1"
-                                            CornerRadius="7"
-                                            Padding="12"
-                                            PointerPressed="WorkflowNode_PointerPressed">
-                                        <Grid RowDefinitions="Auto,*,Auto">
-                                            <TextBlock Text="{Binding Kind}"
-                                                       Foreground="#DCEEFF"
-                                                       FontSize="11"
-                                                       FontWeight="SemiBold"/>
-                                            <TextBlock Grid.Row="1"
-                                                       Text="{Binding Title}"
-                                                       Foreground="White"
-                                                       FontSize="16"
-                                                       FontWeight="Bold"
-                                                       TextWrapping="Wrap"
-                                                       VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Row="2"
-                                                       Text="{Binding OutputLabel}"
-                                                       Foreground="#F1F1F1"
-                                                       FontSize="11"
-                                                       TextWrapping="Wrap"
-                                                       MaxHeight="30"/>
-                                        </Grid>
-                                    </Border>
+                                    <Grid Width="{Binding Width}"
+                                          Height="{Binding Height}"
+                                          PointerPressed="WorkflowNode_PointerPressed">
+                                        <Border Background="{Binding Color}"
+                                                BorderBrush="#DDEEFF"
+                                                BorderThickness="1"
+                                                CornerRadius="7"
+                                                Padding="12">
+                                            <Grid RowDefinitions="Auto,*,Auto">
+                                                <Grid ColumnDefinitions="Auto,*"
+                                                      ColumnSpacing="6">
+                                                    <TextBlock Text="{Binding Icon}"
+                                                               Foreground="#FFFFFF"
+                                                               FontSize="12"
+                                                               FontWeight="SemiBold"/>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding Kind}"
+                                                               Foreground="#DCEEFF"
+                                                               FontSize="11"
+                                                               FontWeight="SemiBold"/>
+                                                </Grid>
+                                                <TextBlock Grid.Row="1"
+                                                           Text="{Binding Title}"
+                                                           Foreground="White"
+                                                           FontSize="16"
+                                                           FontWeight="Bold"
+                                                           TextWrapping="Wrap"
+                                                           VerticalAlignment="Center"/>
+                                                <TextBlock Grid.Row="2"
+                                                           Text="{Binding OutputLabel}"
+                                                           Foreground="#F1F1F1"
+                                                           FontSize="11"
+                                                           TextWrapping="Wrap"
+                                                           MaxHeight="30"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Width="16"
+                                                Height="16"
+                                                CornerRadius="8"
+                                                Background="#F4F7FF"
+                                                BorderBrush="#1A1A1A"
+                                                BorderThickness="2"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Center"
+                                                Margin="-8,0,0,0"
+                                                IsVisible="{Binding CanAcceptInput}"
+                                                PointerPressed="InputPort_PointerPressed"/>
+                                        <Border Width="16"
+                                                Height="16"
+                                                CornerRadius="8"
+                                                Background="#FFE18A"
+                                                BorderBrush="#1A1A1A"
+                                                BorderThickness="2"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,-8,0"
+                                                IsVisible="{Binding CanStartOutput}"
+                                                PointerPressed="OutputPort_PointerPressed"/>
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -330,14 +362,33 @@
                             <ItemsControl ItemsSource="{Binding SelectedWorkflowNode.Parameters}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="vm:BrowserNodeParameter">
-                                        <Grid ColumnDefinitions="100,*"
-                                              Margin="0,5,0,0">
+                                        <Grid RowDefinitions="Auto,Auto"
+                                              Margin="0,8,0,0">
                                             <TextBlock Text="{Binding Name}"
-                                                       Foreground="#9BC7FF"/>
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding Value}"
-                                                       Foreground="#EDEDED"
-                                                       TextWrapping="Wrap"/>
+                                                       Foreground="#9BC7FF"
+                                                       FontWeight="SemiBold"/>
+                                            <TextBox Grid.Row="1"
+                                                     Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                     IsVisible="{Binding IsText}"
+                                                     MinHeight="32"/>
+                                            <TextBox Grid.Row="1"
+                                                     Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                     IsVisible="{Binding IsNumber}"
+                                                     MinHeight="32"/>
+                                            <TextBox Grid.Row="1"
+                                                     Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                     IsVisible="{Binding IsDate}"
+                                                     PlaceholderText="YYYY-MM-DD"
+                                                     MinHeight="32"/>
+                                            <ComboBox Grid.Row="1"
+                                                      ItemsSource="{Binding Options}"
+                                                      SelectedItem="{Binding Value, Mode=TwoWay}"
+                                                      IsVisible="{Binding IsDropdown}"
+                                                      MinHeight="32"/>
+                                            <CheckBox Grid.Row="1"
+                                                      Content="Enabled"
+                                                      IsChecked="{Binding Value, Mode=TwoWay}"
+                                                      IsVisible="{Binding IsCheckbox}"/>
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>

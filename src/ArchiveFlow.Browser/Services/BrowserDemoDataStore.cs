@@ -3,6 +3,7 @@ using System.Xml.Linq;
 using ArchiveFlow.Application.DTOs;
 using ArchiveFlow.Application.Interfaces;
 using ArchiveFlow.Domain.Entities;
+using ArchiveFlow.Domain.Enums;
 
 namespace ArchiveFlow.Browser.Services;
 
@@ -469,36 +470,100 @@ public sealed class BrowserDemoDataStore :
     private void SeedBaseData()
     {
         var now = DateTime.UtcNow;
-        var files = new[]
+        var fileProfiles = new[]
         {
-            FileRecord.CreateVirtual("browser-demo://research/ai-research-brief.pdf", "demo-001", 420_000, "application/pdf", now.AddDays(-14)),
-            FileRecord.CreateVirtual("browser-demo://notes/metadata-workshop-notes.md", "demo-002", 24_600, "text/markdown", now.AddDays(-10)),
-            FileRecord.CreateVirtual("browser-demo://datasets/catalog-crosswalk.csv", "demo-003", 82_100, "text/csv", now.AddDays(-8)),
-            FileRecord.CreateVirtual("browser-demo://images/archive-diagram.png", "demo-004", 318_000, "image/png", now.AddDays(-5)),
-            FileRecord.CreateVirtual("browser-demo://assets/exhibit-model.glb", "demo-005", 1_280_000, "model/gltf-binary", now.AddDays(-3)),
-            FileRecord.CreateVirtual("browser-demo://references/source-bibliography.bib", "demo-006", 17_200, "text/plain", now.AddDays(-2)),
-            FileRecord.CreateVirtual("browser-demo://documents/missing-subject-report.docx", "demo-007", 212_000, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", now.AddDays(-1))
+            ("research", ".pdf", "application/pdf", "AI research brief", 420_000L),
+            ("notes", ".md", "text/markdown", "metadata workshop notes", 24_600L),
+            ("datasets", ".csv", "text/csv", "catalog crosswalk", 82_100L),
+            ("images", ".png", "image/png", "archive diagram", 318_000L),
+            ("assets", ".glb", "model/gltf-binary", "exhibit model", 1_280_000L),
+            ("references", ".bib", "text/plain", "source bibliography", 17_200L),
+            ("documents", ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "collection report", 212_000L),
+            ("transcripts", ".txt", "text/plain", "oral history transcript", 46_000L),
+            ("media", ".mp4", "video/mp4", "gallery walkthrough", 5_800_000L),
+            ("audio", ".mp3", "audio/mpeg", "interview excerpt", 2_400_000L),
+            ("packages", ".zip", "application/zip", "source package", 980_000L),
+            ("images", ".jpg", "image/jpeg", "installation reference", 540_000L)
         };
+
+        var subjects = new[] { "Artificial Intelligence", "Digital Preservation", "Metadata Strategy", "Exhibition Design", "Oral History", "Research Methods" };
+        var projects = new[] { "ArchiveFlow Demo", "Museum Digitization", "Knowledge Graph", "Reading Review", "Asset Mapping" };
+        var tags = new[] { "research", "metadata", "dataset", "visual", "asset", "source", "workflow", "review" };
+        var files = new List<FileRecord>();
+        for (var index = 0; index < 120; index++)
+        {
+            var profile = fileProfiles[index % fileProfiles.Length];
+            var number = index + 1;
+            var slug = profile.Item3 == "text/csv" ? "catalog-data" : profile.Item4.Replace(' ', '-');
+            var path = $"browser-demo://{profile.Item1}/{slug}-{number:000}{profile.Item2}";
+            var hash = index % 19 == 0 && files.Count > 0
+                ? files[index - 1].FileHash
+                : $"demo-hash-{index % 97:000}-{profile.Item2.TrimStart('.')}";
+            var file = FileRecord.CreateVirtual(
+                path,
+                hash,
+                profile.Item5 + index * 1377,
+                profile.Item3,
+                now.AddDays(-(index % 45)).AddMinutes(-index));
+
+            if (index % 13 == 0)
+            {
+                file.UpdateStatus(FileStatus.Incomplete);
+            }
+            else if (index % 19 == 0)
+            {
+                file.UpdateStatus(FileStatus.Duplicate);
+            }
+            else if (index % 7 == 0)
+            {
+                file.UpdateStatus(FileStatus.Archived);
+            }
+
+            var subject = subjects[index % subjects.Length];
+            var project = projects[index % projects.Length];
+            var tag = tags[index % tags.Length];
+            file.UpdatePreview(
+                $"{profile.Item4} sample content for ArchiveFlow Browser Demo. " +
+                $"This record discusses {subject}, {project}, metadata extraction, workflow validation, full-text search, graph relationships, duplicate detection, and export review.");
+            files.Add(file);
+
+            SetMetadataValueAsync(file.Id, "title", "Title", "String", "Descriptive", $"{CultureTitle(profile.Item4)} {number:000}").GetAwaiter().GetResult();
+            if (index % 9 != 0)
+            {
+                SetMetadataValueAsync(file.Id, "subject", "Subject", "String", "Descriptive", subject).GetAwaiter().GetResult();
+            }
+
+            if (index % 5 != 0)
+            {
+                SetMetadataValueAsync(file.Id, "project", "Project", "String", "Descriptive", project).GetAwaiter().GetResult();
+            }
+
+            AddMetadataValueIfMissingAsync(file.Id, "tag", "Tag", "String", "Descriptive", tag).GetAwaiter().GetResult();
+            if (index % 4 == 0)
+            {
+                AddMetadataValueIfMissingAsync(file.Id, "tag", "Tag", "String", "Descriptive", "browser-demo").GetAwaiter().GetResult();
+            }
+
+            SetMetadataValueAsync(file.Id, "status", "Status", "String", "Basic", file.GetStatus().ToString()).GetAwaiter().GetResult();
+            if (index % 3 == 0)
+            {
+                SetMetadataValueAsync(file.Id, "reading_status", "Reading Status", "String", "Personal", index % 2 == 0 ? "Read" : "To Read").GetAwaiter().GetResult();
+            }
+        }
 
         _files.AddRange(files);
 
-        foreach (var file in files)
+        for (var index = 0; index < files.Count - 6; index += 10)
         {
-            file.UpdatePreview($"{file.FileName} sample content for online workflow, full-text search, metadata review, and export demonstration.");
+            TryCreateRelationshipAsync(files[index].Id, files[index + 3].Id, "references").GetAwaiter().GetResult();
+            TryCreateRelationshipAsync(files[index + 1].Id, files[index + 6].Id, "describes").GetAwaiter().GetResult();
         }
+    }
 
-        SetMetadataValueAsync(files[0].Id, "title", "Title", "String", "Descriptive", "AI Research Brief").GetAwaiter().GetResult();
-        SetMetadataValueAsync(files[0].Id, "subject", "Subject", "String", "Descriptive", "Artificial Intelligence").GetAwaiter().GetResult();
-        AddMetadataValueIfMissingAsync(files[0].Id, "tag", "Tag", "String", "Descriptive", "research").GetAwaiter().GetResult();
-        AddMetadataValueIfMissingAsync(files[1].Id, "tag", "Tag", "String", "Descriptive", "metadata").GetAwaiter().GetResult();
-        AddMetadataValueIfMissingAsync(files[2].Id, "tag", "Tag", "String", "Descriptive", "dataset").GetAwaiter().GetResult();
-        AddMetadataValueIfMissingAsync(files[3].Id, "tag", "Tag", "String", "Descriptive", "visual").GetAwaiter().GetResult();
-        AddMetadataValueIfMissingAsync(files[4].Id, "tag", "Tag", "String", "Descriptive", "asset").GetAwaiter().GetResult();
-        SetMetadataValueAsync(files[5].Id, "subject", "Subject", "String", "Descriptive", "Bibliography").GetAwaiter().GetResult();
-        SetMetadataValueAsync(files[6].Id, "status", "Status", "String", "Basic", "Needs Metadata").GetAwaiter().GetResult();
-
-        TryCreateRelationshipAsync(files[0].Id, files[5].Id, "cites").GetAwaiter().GetResult();
-        TryCreateRelationshipAsync(files[1].Id, files[2].Id, "describes").GetAwaiter().GetResult();
+    private static string CultureTitle(string value)
+    {
+        return string.Join(' ', value.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => char.ToUpperInvariant(part[0]) + part[1..]));
     }
 
     private static string NormalizeFieldName(string fieldName)

@@ -61,6 +61,28 @@ public partial class MainView : UserControl
         e.Handled = true;
     }
 
+    private void OutputPort_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control control || control.DataContext is not BrowserWorkflowNode node)
+        {
+            return;
+        }
+
+        ViewModel?.BeginPortConnection(node);
+        e.Handled = true;
+    }
+
+    private void InputPort_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control control || control.DataContext is not BrowserWorkflowNode node)
+        {
+            return;
+        }
+
+        ViewModel?.CompletePortConnection(node);
+        e.Handled = true;
+    }
+
     private void AddNodeButton_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: BrowserNodeLibraryItem item })
